@@ -109,3 +109,55 @@ export function projectTime(
   }
   return totalSec;
 }
+
+export type Split = {
+  km: number; // 1, 2, 3, ... (the final entry may be a partial km)
+  distanceKm: number; // actual length — ~1, last is partial
+  grade: number; // net grade across the km (rise / run)
+  paceSecPerKm: number;
+  elapsedSec: number; // cumulative time at the end of this km
+};
+
+export function computeSplits(
+  dists: number[],
+  grades: number[],
+  flatPaceSecPerKm: number,
+): Split[] {
+  const splits: Split[] = [];
+  let kmMeters = 0;
+  let kmRise = 0;
+  let kmTimeSec = 0;
+  let elapsedSec = 0;
+  let kmIndex = 1;
+
+  const flush = () => {
+    splits.push({
+      km: kmIndex,
+      distanceKm: kmMeters / 1000,
+      grade: kmRise / kmMeters, // distance-weighted average = net rise / run
+      paceSecPerKm: kmTimeSec / (kmMeters / 1000),
+      elapsedSec,
+    });
+    kmIndex++;
+    kmMeters = 0;
+    kmRise = 0;
+    kmTimeSec = 0;
+  };
+
+  for (let i = 1; i < dists.length; i++) {
+    const segMeters = dists[i] - dists[i - 1];
+    const grade = grades[i - 1];
+    const segTimeSec = (segMeters / 1000) * flatPaceSecPerKm * ratio(grade);
+
+    kmMeters += segMeters;
+    kmRise += grade * segMeters; // grade * run = rise; summed = net rise for the km
+    kmTimeSec += segTimeSec;
+    elapsedSec += segTimeSec;
+
+    if (kmMeters >= 1000) flush(); // close the bucket once we've banked a km
+  }
+
+  if (kmMeters > 0) flush(); // final partial km
+
+  return splits;
+}

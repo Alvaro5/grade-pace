@@ -6,22 +6,35 @@ import {
   smoothElevation,
   elevationChange,
   gradients,
-  projectTime,
+  computeSplits,
+  type Split,
 } from "./lib/pacing";
 
-type Summary = {
+type Plan = {
   distanceKm: number;
   gainM: number;
   timeSec: number;
+  splits: Split[];
 };
 
 const FLAT_PACE_S_PER_KM = 360; // 6:00/km — the effort input (a UI field later)
 
-const fmt = (s: number) =>
-  `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}`;
+const pad = (n: number) => String(n).padStart(2, "0");
+
+const fmtClock = (s: number) => {
+  const t = Math.round(s);
+  return `${Math.floor(t / 3600)}:${pad(Math.floor((t % 3600) / 60))}:${pad(t % 60)}`;
+};
+
+const fmtPace = (s: number) => {
+  const t = Math.round(s);
+  return `${Math.floor(t / 60)}:${pad(t % 60)}`;
+};
+
+const fmtGrade = (g: number) => `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
 
 function GpxUpload() {
-  const [summary, setSummary] = useState<Summary | null>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
 
   function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -33,11 +46,13 @@ function GpxUpload() {
         const distances = cumulativeDistances(points);
         const smoothed = smoothElevation(points, 3);
         const grades = gradients(smoothed, distances);
+        const splits = computeSplits(distances, grades, FLAT_PACE_S_PER_KM);
 
-        setSummary({
+        setPlan({
           distanceKm: distances[distances.length - 1] / 1000,
           gainM: elevationChange(smoothed).gain,
-          timeSec: projectTime(grades, distances, FLAT_PACE_S_PER_KM),
+          timeSec: splits.length ? splits[splits.length - 1].elapsedSec : 0,
+          splits,
         });
       })
       .catch((err) => console.error(err));
@@ -46,15 +61,37 @@ function GpxUpload() {
   return (
     <>
       <input type="file" accept=".gpx" onChange={handleFile} />
-      {summary && (
-        <dl>
-          <dt>Distance</dt>
-          <dd>{summary.distanceKm.toFixed(2)} km</dd>
-          <dt>Elevation gain (D+)</dt>
-          <dd>{summary.gainM.toFixed(0)} m</dd>
-          <dt>Projected time @6:00/km</dt>
-          <dd>{fmt(summary.timeSec)}</dd>
-        </dl>
+      {plan && (
+        <>
+          <dl>
+            <dt>Distance</dt>
+            <dd>{plan.distanceKm.toFixed(2)} km</dd>
+            <dt>Elevation gain (D+)</dt>
+            <dd>{plan.gainM.toFixed(0)} m</dd>
+            <dt>Projected time @6:00/km</dt>
+            <dd>{fmtClock(plan.timeSec)}</dd>
+          </dl>
+          <table>
+            <thead>
+              <tr>
+                <th>km</th>
+                <th>grade</th>
+                <th>pace</th>
+                <th>elapsed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plan.splits.map((s) => (
+                <tr key={s.km}>
+                  <td>{s.km}</td>
+                  <td>{fmtGrade(s.grade)}</td>
+                  <td>{fmtPace(s.paceSecPerKm)}/km</td>
+                  <td>{fmtClock(s.elapsedSec)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </>
   );
