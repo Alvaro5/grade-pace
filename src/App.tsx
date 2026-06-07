@@ -1,5 +1,4 @@
 import { useState } from "react";
-import "./App.css";
 import {
   parseGpx,
   cumulativeDistances,
@@ -10,16 +9,12 @@ import {
   type Split,
 } from "./lib/pacing";
 
-type Plan = {
+type Track = {
+  distances: number[];
+  grades: number[];
   distanceKm: number;
   gainM: number;
-  timeSec: number;
-  splits: Split[];
 };
-
-const FLAT_PACE_S_PER_KM = 360; // 6:00/km — the effort input (a UI field later)
-const HIKE_VAM_M_PER_H = 750; // power-hike vertical ascent rate (a UI field later)
-const HIKE_TRANSITION_GRADE = 0.18; // above this grade, switch to power-hiking
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -35,8 +30,45 @@ const fmtPace = (s: number) => {
 
 const fmtGrade = (g: number) => `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
 
+// "6:00" -> 360 seconds; falls back to 6:00 if unparseable
+function parsePace(text: string): number {
+  const [m, s] = text.split(":").map(Number);
+  const sec = (m || 0) * 60 + (s || 0);
+  return sec > 0 ? sec : 360;
+}
+
+const inputClass =
+  "w-28 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 tabular-nums focus:border-emerald-500 focus:outline-none";
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+      <div className="text-xs uppercase tracking-wider text-zinc-400">{label}</div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="text-zinc-400">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function GpxUpload() {
-  const [plan, setPlan] = useState<Plan | null>(null);
+  const [track, setTrack] = useState<Track | null>(null);
+  const [paceText, setPaceText] = useState("6:00");
+  const [vam, setVam] = useState(750);
+  const [hikeAbovePct, setHikeAbovePct] = useState(18);
 
   function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -48,65 +80,118 @@ function GpxUpload() {
         const distances = cumulativeDistances(points);
         const smoothed = smoothElevation(points, 3);
         const grades = gradients(smoothed, distances);
-        const splits = computeSplits(
+        setTrack({
           distances,
           grades,
-          FLAT_PACE_S_PER_KM,
-          HIKE_VAM_M_PER_H,
-          HIKE_TRANSITION_GRADE,
-        );
-
-        setPlan({
           distanceKm: distances[distances.length - 1] / 1000,
           gainM: elevationChange(smoothed).gain,
-          timeSec: splits.length ? splits[splits.length - 1].elapsedSec : 0,
-          splits,
         });
       })
       .catch((err) => console.error(err));
   }
 
+  // Derive the plan from the parsed track + the effort inputs, so editing a
+  // field recomputes without re-uploading. Cheap enough to run every render.
+  const splits: Split[] = track
+    ? computeSplits(
+        track.distances,
+        track.grades,
+        parsePace(paceText),
+        Math.max(1, vam),
+        hikeAbovePct / 100,
+      )
+    : [];
+  const timeSec = splits.length ? splits[splits.length - 1].elapsedSec : 0;
+
   return (
     <>
-      <input type="file" accept=".gpx" onChange={handleFile} />
-      {plan && (
-        <>
-          <dl>
-            <dt>Distance</dt>
-            <dd>{plan.distanceKm.toFixed(2)} km</dd>
-            <dt>Elevation gain (D+)</dt>
-            <dd>{plan.gainM.toFixed(0)} m</dd>
-            <dt>Projected time @6:00/km</dt>
-            <dd>{fmtClock(plan.timeSec)}</dd>
-          </dl>
-          <table>
+      <input
+        type="file"
+        accept=".gpx"
+        onChange={handleFile}
+        className="block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-emerald-500"
+      />
+
+      {track && (
+        <div className="mt-8 space-y-6">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              Effort
+            </h2>
+            <div className="mt-3 flex flex-wrap gap-4">
+              <Field label="Flat pace (min/km)">
+                <input
+                  value={paceText}
+                  onChange={(e) => setPaceText(e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Hike VAM (m/h)">
+                <input
+                  type="number"
+                  value={vam}
+                  onChange={(e) => setVam(Number(e.target.value))}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Hike above (%)">
+                <input
+                  type="number"
+                  value={hikeAbovePct}
+                  onChange={(e) => setHikeAbovePct(Number(e.target.value))}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <StatCard label="Distance" value={`${track.distanceKm.toFixed(2)} km`} />
+            <StatCard label="Elevation gain" value={`${track.gainM.toFixed(0)} m`} />
+            <StatCard label="Projected time" value={fmtClock(timeSec)} />
+          </div>
+
+          <table className="w-full border-collapse text-sm">
             <thead>
-              <tr>
-                <th>km</th>
-                <th>grade</th>
-                <th>D+</th>
-                <th>hike</th>
-                <th>pace</th>
-                <th>elapsed</th>
+              <tr className="border-b border-zinc-700 text-xs uppercase tracking-wider text-zinc-400">
+                <th className="py-2 pr-4 text-left font-medium">km</th>
+                <th className="py-2 pr-4 text-right font-medium">grade</th>
+                <th className="py-2 pr-4 text-right font-medium">D+</th>
+                <th className="py-2 pr-4 text-right font-medium">hike</th>
+                <th className="py-2 pr-4 text-right font-medium">pace</th>
+                <th className="py-2 text-right font-medium">elapsed</th>
               </tr>
             </thead>
             <tbody>
-              {plan.splits.map((s) => (
-                <tr key={s.km}>
-                  <td>
+              {splits.map((s) => (
+                <tr
+                  key={s.km}
+                  className={`border-b border-zinc-800/70 tabular-nums ${
+                    s.hikeFraction > 0 ? "text-emerald-400" : "text-zinc-200"
+                  }`}
+                >
+                  <td className="py-1.5 pr-4">
                     {s.km}
-                    {s.distanceKm < 0.95 ? ` (${s.distanceKm.toFixed(2)} km)` : ""}
+                    {s.distanceKm < 0.95
+                      ? ` (${s.distanceKm.toFixed(2)})`
+                      : ""}
                   </td>
-                  <td>{fmtGrade(s.grade)}</td>
-                  <td>{s.gainM.toFixed(0)} m</td>
-                  <td>{s.hikeFraction > 0 ? `${(s.hikeFraction * 100).toFixed(0)}%` : "—"}</td>
-                  <td>{fmtPace(s.paceSecPerKm)}/km</td>
-                  <td>{fmtClock(s.elapsedSec)}</td>
+                  <td className="py-1.5 pr-4 text-right">{fmtGrade(s.grade)}</td>
+                  <td className="py-1.5 pr-4 text-right">{s.gainM.toFixed(0)} m</td>
+                  <td className="py-1.5 pr-4 text-right">
+                    {s.hikeFraction > 0
+                      ? `${(s.hikeFraction * 100).toFixed(0)}%`
+                      : "—"}
+                  </td>
+                  <td className="py-1.5 pr-4 text-right">
+                    {fmtPace(s.paceSecPerKm)}/km
+                  </td>
+                  <td className="py-1.5 text-right">{fmtClock(s.elapsedSec)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </>
+        </div>
       )}
     </>
   );
@@ -114,15 +199,17 @@ function GpxUpload() {
 
 function App() {
   return (
-    <>
-      <section id="center">
-        <div className="hero"></div>
-        <div>
-          <h1>Get started</h1>
+    <main className="min-h-screen px-4 py-10">
+      <div className="mx-auto max-w-3xl">
+        <h1 className="text-3xl font-bold tracking-tight">Trail Pacing</h1>
+        <p className="mt-1 text-sm text-zinc-400">
+          Grade-adjusted race plan from a GPX track
+        </p>
+        <div className="mt-6">
           <GpxUpload />
         </div>
-      </section>
-    </>
+      </div>
+    </main>
   );
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { minettiCost } from "./pacing";
+import { minettiCost, computeSplits } from "./pacing";
 
 describe("minettiCost", () => {
   // The seven anchor values verified against Minetti et al. (2002).
@@ -24,5 +24,40 @@ describe("minettiCost", () => {
   it("clamps gradients beyond ±0.45 to the validated range", () => {
     expect(minettiCost(54)).toBeCloseTo(minettiCost(0.45), 5);
     expect(minettiCost(-54)).toBeCloseTo(minettiCost(-0.45), 5);
+  });
+});
+
+describe("computeSplits", () => {
+  const FLAT = 360; // 6:00/km
+  const VAM = 750; // m/h
+  const GATE = 0.18; // hike above +18%
+
+  it("runs a flat course at exactly the flat pace", () => {
+    const splits = computeSplits([0, 1000, 2000], [0, 0], FLAT, VAM, GATE);
+    expect(splits).toHaveLength(2);
+    expect(splits[0].paceSecPerKm).toBeCloseTo(FLAT, 5);
+    expect(splits[1].elapsedSec).toBeCloseTo(720, 5); // 2 km × 360 s
+    expect(splits[0].hikeFraction).toBe(0);
+  });
+
+  it("runs a climb below the transition grade (no hiking)", () => {
+    const splits = computeSplits([0, 1000], [0.1], FLAT, VAM, GATE);
+    expect(splits[0].hikeFraction).toBe(0);
+    // pace = flat × cost ratio
+    expect(splits[0].paceSecPerKm).toBeCloseTo(
+      FLAT * (minettiCost(0.1) / minettiCost(0)),
+      5,
+    );
+  });
+
+  it("forces a power-hike above the transition grade, slower than running", () => {
+    const splits = computeSplits([0, 1000], [0.25], FLAT, VAM, GATE);
+    expect(splits[0].hikeFraction).toBe(1);
+    // hike time = rise / VAM = 250 m ÷ (750/3600 m/s) = 1200 s
+    expect(splits[0].paceSecPerKm).toBeCloseTo(1200, 5);
+    // and that is slower than running the same grade would have been
+    expect(splits[0].paceSecPerKm).toBeGreaterThan(
+      FLAT * (minettiCost(0.25) / minettiCost(0)),
+    );
   });
 });
