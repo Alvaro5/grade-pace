@@ -31,9 +31,10 @@ describe("computeSplits", () => {
   const FLAT = 360; // 6:00/km
   const VAM = 750; // m/h
   const GATE = 0.18; // hike above +18%
+  const NONE = 1; // terrain factor, no penalty
 
   it("runs a flat course at exactly the flat pace", () => {
-    const splits = computeSplits([0, 1000, 2000], [0, 0], FLAT, VAM, GATE);
+    const splits = computeSplits([0, 1000, 2000], [0, 0], FLAT, VAM, GATE, NONE);
     expect(splits).toHaveLength(2);
     expect(splits[0].paceSecPerKm).toBeCloseTo(FLAT, 5);
     expect(splits[1].elapsedSec).toBeCloseTo(720, 5); // 2 km × 360 s
@@ -41,7 +42,7 @@ describe("computeSplits", () => {
   });
 
   it("runs a climb below the transition grade (no hiking)", () => {
-    const splits = computeSplits([0, 1000], [0.1], FLAT, VAM, GATE);
+    const splits = computeSplits([0, 1000], [0.1], FLAT, VAM, GATE, NONE);
     expect(splits[0].hikeFraction).toBe(0);
     // pace = flat × cost ratio
     expect(splits[0].paceSecPerKm).toBeCloseTo(
@@ -51,7 +52,7 @@ describe("computeSplits", () => {
   });
 
   it("forces a power-hike above the transition grade, slower than running", () => {
-    const splits = computeSplits([0, 1000], [0.25], FLAT, VAM, GATE);
+    const splits = computeSplits([0, 1000], [0.25], FLAT, VAM, GATE, NONE);
     expect(splits[0].hikeFraction).toBe(1);
     // hike time = rise / VAM = 250 m ÷ (750/3600 m/s) = 1200 s
     expect(splits[0].paceSecPerKm).toBeCloseTo(1200, 5);
@@ -59,5 +60,16 @@ describe("computeSplits", () => {
     expect(splits[0].paceSecPerKm).toBeGreaterThan(
       FLAT * (minettiCost(0.25) / minettiCost(0)),
     );
+  });
+
+  it("scales all moving time by the terrain factor (and nothing else)", () => {
+    const dists = [0, 1000, 2000];
+    const grades = [0, 0];
+    const base = computeSplits(dists, grades, FLAT, VAM, GATE, 1);
+    const rough = computeSplits(dists, grades, FLAT, VAM, GATE, 1.2);
+    expect(rough[1].elapsedSec).toBeCloseTo(base[1].elapsedSec * 1.2, 5);
+    expect(rough[0].paceSecPerKm).toBeCloseTo(base[0].paceSecPerKm * 1.2, 5);
+    expect(rough[0].grade).toBe(base[0].grade); // terrain doesn't touch grade
+    expect(rough[0].hikeFraction).toBe(base[0].hikeFraction);
   });
 });

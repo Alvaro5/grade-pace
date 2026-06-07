@@ -1,5 +1,14 @@
 import { useState } from "react";
 import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   parseGpx,
   cumulativeDistances,
   smoothElevation,
@@ -14,6 +23,7 @@ type Track = {
   grades: number[];
   distanceKm: number;
   gainM: number;
+  profile: { km: number; ele: number }[];
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -29,6 +39,9 @@ const fmtPace = (s: number) => {
 };
 
 const fmtGrade = (g: number) => `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
+
+const gradeClass = (g: number) =>
+  g > 0.005 ? "text-rose-400" : g < -0.005 ? "text-sky-400" : "text-zinc-400";
 
 // "6:00" -> 360 seconds; falls back to 6:00 if unparseable
 function parsePace(text: string): number {
@@ -57,9 +70,45 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-sm">
+    <label className="flex w-44 flex-col gap-1 text-sm">
       <span className="text-zinc-400">{label}</span>
       {children}
+    </label>
+  );
+}
+
+function SliderField({
+  label,
+  value,
+  display,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  display: string;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <label className="flex w-44 flex-col gap-1 text-sm">
+      <span className="flex justify-between text-zinc-400">
+        <span>{label}</span>
+        <span className="tabular-nums text-zinc-200">{display}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="accent-emerald-500"
+      />
     </label>
   );
 }
@@ -69,6 +118,7 @@ function GpxUpload() {
   const [paceText, setPaceText] = useState("6:00");
   const [vam, setVam] = useState(750);
   const [hikeAbovePct, setHikeAbovePct] = useState(18);
+  const [terrainFactor, setTerrainFactor] = useState(1.2);
 
   function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -85,6 +135,10 @@ function GpxUpload() {
           grades,
           distanceKm: distances[distances.length - 1] / 1000,
           gainM: elevationChange(smoothed).gain,
+          profile: smoothed.map((p, i) => ({
+            km: distances[i] / 1000,
+            ele: p.ele,
+          })),
         });
       })
       .catch((err) => console.error(err));
@@ -99,6 +153,7 @@ function GpxUpload() {
         parsePace(paceText),
         Math.max(1, vam),
         hikeAbovePct / 100,
+        terrainFactor,
       )
     : [];
   const timeSec = splits.length ? splits[splits.length - 1].elapsedSec : 0;
@@ -118,7 +173,7 @@ function GpxUpload() {
             <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
               Effort
             </h2>
-            <div className="mt-3 flex flex-wrap gap-4">
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-4">
               <Field label="Flat pace (min/km)">
                 <input
                   value={paceText}
@@ -126,23 +181,85 @@ function GpxUpload() {
                   className={inputClass}
                 />
               </Field>
-              <Field label="Hike VAM (m/h)">
-                <input
-                  type="number"
-                  value={vam}
-                  onChange={(e) => setVam(Number(e.target.value))}
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="Hike above (%)">
-                <input
-                  type="number"
-                  value={hikeAbovePct}
-                  onChange={(e) => setHikeAbovePct(Number(e.target.value))}
-                  className={inputClass}
-                />
-              </Field>
+              <SliderField
+                label="Hike VAM"
+                display={`${vam} m/h`}
+                value={vam}
+                min={300}
+                max={1200}
+                step={50}
+                onChange={setVam}
+              />
+              <SliderField
+                label="Hike above"
+                display={`${hikeAbovePct}%`}
+                value={hikeAbovePct}
+                min={5}
+                max={40}
+                step={1}
+                onChange={setHikeAbovePct}
+              />
+              <SliderField
+                label="Terrain factor"
+                display={`×${terrainFactor.toFixed(2)}`}
+                value={terrainFactor}
+                min={1}
+                max={1.5}
+                step={0.05}
+                onChange={setTerrainFactor}
+              />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+            <ResponsiveContainer width="100%" height={160}>
+              <AreaChart
+                data={track.profile}
+                margin={{ top: 5, right: 5, bottom: 0, left: -10 }}
+              >
+                <defs>
+                  <linearGradient id="ele" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#27272a" vertical={false} />
+                <XAxis
+                  dataKey="km"
+                  type="number"
+                  domain={[0, "dataMax"]}
+                  tickFormatter={(v: number) => v.toFixed(0)}
+                  stroke="#71717a"
+                  fontSize={12}
+                  tickLine={false}
+                />
+                <YAxis
+                  width={44}
+                  stroke="#71717a"
+                  fontSize={12}
+                  tickLine={false}
+                  tickFormatter={(v: number) => `${Math.round(v)}m`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "#18181b",
+                    border: "1px solid #3f3f46",
+                    borderRadius: 8,
+                    fontSize: 12,
+                  }}
+                  labelStyle={{ color: "#a1a1aa" }}
+                  formatter={(v) => [`${Math.round(Number(v))} m`, "elevation"]}
+                  labelFormatter={(v) => `km ${Number(v).toFixed(1)}`}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="ele"
+                  stroke="#34d399"
+                  strokeWidth={2}
+                  fill="url(#ele)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
@@ -166,9 +283,7 @@ function GpxUpload() {
               {splits.map((s) => (
                 <tr
                   key={s.km}
-                  className={`border-b border-zinc-800/70 tabular-nums ${
-                    s.hikeFraction > 0 ? "text-emerald-400" : "text-zinc-200"
-                  }`}
+                  className="border-b border-zinc-800/70 tabular-nums text-zinc-200 hover:bg-zinc-900/40"
                 >
                   <td className="py-1.5 pr-4">
                     {s.km}
@@ -176,12 +291,18 @@ function GpxUpload() {
                       ? ` (${s.distanceKm.toFixed(2)})`
                       : ""}
                   </td>
-                  <td className="py-1.5 pr-4 text-right">{fmtGrade(s.grade)}</td>
+                  <td className={`py-1.5 pr-4 text-right ${gradeClass(s.grade)}`}>
+                    {fmtGrade(s.grade)}
+                  </td>
                   <td className="py-1.5 pr-4 text-right">{s.gainM.toFixed(0)} m</td>
                   <td className="py-1.5 pr-4 text-right">
-                    {s.hikeFraction > 0
-                      ? `${(s.hikeFraction * 100).toFixed(0)}%`
-                      : "—"}
+                    {s.hikeFraction > 0 ? (
+                      <span className="text-emerald-400">
+                        {(s.hikeFraction * 100).toFixed(0)}%
+                      </span>
+                    ) : (
+                      <span className="text-zinc-600">—</span>
+                    )}
                   </td>
                   <td className="py-1.5 pr-4 text-right">
                     {fmtPace(s.paceSecPerKm)}/km

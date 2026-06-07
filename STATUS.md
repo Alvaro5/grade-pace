@@ -17,11 +17,14 @@
 - Per-segment pace from cost ratio → projected finish time on screen
 - Per-km splits table (km / grade / D+ / hike% / pace / elapsed)
 - Run/hike transition: forced power-hike above +18% grade at 750 m/h VAM → 1:57 on the 25 Bosses
+- Tailwind dark dashboard UI; effort inputs as live fields + sliders (pace / VAM / gate / terrain)
+- Terrain factor (single multiplier) accuracy knob; default ×1.2 → ~2:21 on the 25 Bosses
+- Elevation profile chart (Recharts); `computeSplits` covered by unit tests (12 total)
 
 ## Next
-- Effort inputs as UI fields (flat pace, VAM, transition grade) instead of constants
-- Terrain/fatigue layer to close the remaining gap to real-world 2–3h
-- `computeSplits` unit test (currently untested — the binning + gait logic)
+- Fatigue-fade model (pace drift over elapsed time) — the other half of "accuracy"
+- Bundle ~530 kB (Recharts heavy) → code-split the chart if load time matters
+- Polish: pace stepper, hover tooltips on splits, mobile layout
 
 ## Known issues
 - Gradient array contains spurious spikes (saw +3722%) from near-coincident GPS points.

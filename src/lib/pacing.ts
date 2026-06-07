@@ -141,6 +141,7 @@ export function computeSplits(
   flatPaceSecPerKm: number,
   hikeVamMperH: number,
   transitionGrade: number,
+  terrainFactor: number,
 ): Split[] {
   const splits: Split[] = [];
   let kmMeters = 0;
@@ -181,12 +182,14 @@ export function computeSplits(
       transitionGrade,
     );
 
+    const adjSec = sec * terrainFactor; // technical/soft ground slows all moving time
+
     kmMeters += segMeters;
     kmRise += rise; // net (signed) rise for the km
     if (rise > 0) kmGain += rise; // D+ counts only the climbs
     if (hiked) kmHikeMeters += segMeters;
-    kmTimeSec += sec;
-    elapsedSec += sec;
+    kmTimeSec += adjSec;
+    elapsedSec += adjSec;
 
     if (kmMeters >= 1000) flush(); // close the bucket once we've banked a km
   }
