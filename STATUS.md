@@ -10,19 +10,35 @@
 - Scaffold deployed live on Vercel
 - GPX upload + parse (DOMParser → {lat, lon, ele}), with parser-error guard
 - Cumulative distance (Haversine)
-- Elevation smoothing (centered moving average, window 3 — D+ 835 m, matches official ~700–900) + D+/D−
+- Elevation smoothing (centered moving average, window 3 — D+ 835 m on 25 Bosses,
+  matches official ~700–900) + D+/D−
 - Per-segment gradients (Δele / Δdist)
 - Minetti grade-adjusted cost model, clamped to ±0.45 — verified against the 2002 paper
-- Engine extracted to `src/lib/pacing.ts` (pure, no React); 7 Minetti anchors + clamp locked in Vitest (`npm test`)
+- Engine extracted to `src/lib/pacing.ts` (pure, no React); Minetti anchors + clamp +
+  computeSplits behavior locked in Vitest (`npm test`)
 - Per-segment pace from cost ratio → projected finish time on screen
 - Per-km splits table (km / grade / D+ / hike% / pace / elapsed)
-- Run/hike transition: forced power-hike above +18% grade at 750 m/h VAM → 1:57 on the 25 Bosses
+- Run/hike transition: HARD SWITCH to power-hike above transition grade at VAM
+  (not min(run,hike) — correct, since iso-effort run always "wins" at VAM 750)
 - Tailwind dark dashboard UI; effort inputs as live fields + sliders (pace / VAM / gate / terrain)
-- Terrain factor (single multiplier) accuracy knob; default ×1.2 → ~2:21 on the 25 Bosses
-- Elevation profile chart (Recharts); `computeSplits` covered by unit tests (12 total)
+- Terrain factor (single multiplier) accuracy knob — **default now ×1.00** (pure Minetti
+  baseline on load; was silently ×1.20, moved the headline number, so reset to 1.00)
+- Elevation profile chart (Recharts)
+- **Validated on the real race GPX** (Imperial Trail, Fontainebleau): parses to
+  68.75 km / 1426 m D+ — matches the ~70 km / ~1130 m billing. Pipeline proven
+  end-to-end on a point-to-point course, not just the 25 Bosses loop.
+- Docs: CLAUDE.md added (decisions, working style, do-not-list); README rewritten
+  to current behavior; removed leftover Vite DEFAULT_README.
 
 ## Next
-- Fatigue-fade model (pace drift over elapsed time) — the other half of "accuracy"
+- Total-time invariant test: assert Σ segment times === last split's elapsedSec
+  (replaces the cross-check lost when projectTime was deleted)
+- Calibration: decide a believable terrain factor for Fontainebleau using the
+  68.75 km finish as a gut-check (7:17 @1.00 vs 8:44 @1.20 — which matches reality?)
+- Fatigue-fade model — ONLY after a second calibration point exists (known split
+  or past race time). Do not fit terrain + fatigue against one finish time.
+- Resample track to even spacing (kills gradient spikes; unblocks a gradient-colored
+  profile chart)
 - Bundle ~530 kB (Recharts heavy) → code-split the chart if load time matters
 - Polish: pace stepper, hover tooltips on splits, mobile layout
 
@@ -36,6 +52,9 @@
   the boundary; deferred for v0. Interim: the final partial km shows its actual distance.
 - parseGpx forward-fills missing <ele>; fine for clean files, revisit if the messier
   September race file has long elevation gaps.
+- Hike gate keys off raw (unclamped) grade, so a surviving GPS spike above the
+  transition grade can overstate a km's hikeFraction. Time is unaffected
+  (hike time = rise/VAM = exactly Δele). Resolved by the resample fix above.
 
 ## Open decisions
 - PWA later; native/watch only if validated

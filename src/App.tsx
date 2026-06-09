@@ -56,7 +56,9 @@ const inputClass =
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-      <div className="text-xs uppercase tracking-wider text-zinc-400">{label}</div>
+      <div className="text-xs uppercase tracking-wider text-zinc-400">
+        {label}
+      </div>
       <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
     </div>
   );
@@ -118,7 +120,7 @@ function GpxUpload() {
   const [paceText, setPaceText] = useState("6:00");
   const [vam, setVam] = useState(750);
   const [hikeAbovePct, setHikeAbovePct] = useState(18);
-  const [terrainFactor, setTerrainFactor] = useState(1.2);
+  const [terrainFactor, setTerrainFactor] = useState(1.0);
 
   function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -263,8 +265,14 @@ function GpxUpload() {
           </div>
 
           <div className="grid grid-cols-3 gap-4">
-            <StatCard label="Distance" value={`${track.distanceKm.toFixed(2)} km`} />
-            <StatCard label="Elevation gain" value={`${track.gainM.toFixed(0)} m`} />
+            <StatCard
+              label="Distance"
+              value={`${track.distanceKm.toFixed(2)} km`}
+            />
+            <StatCard
+              label="Elevation gain"
+              value={`${track.gainM.toFixed(0)} m`}
+            />
             <StatCard label="Projected time" value={fmtClock(timeSec)} />
           </div>
 
@@ -287,14 +295,16 @@ function GpxUpload() {
                 >
                   <td className="py-1.5 pr-4">
                     {s.km}
-                    {s.distanceKm < 0.95
-                      ? ` (${s.distanceKm.toFixed(2)})`
-                      : ""}
+                    {s.distanceKm < 0.95 ? ` (${s.distanceKm.toFixed(2)})` : ""}
                   </td>
-                  <td className={`py-1.5 pr-4 text-right ${gradeClass(s.grade)}`}>
+                  <td
+                    className={`py-1.5 pr-4 text-right ${gradeClass(s.grade)}`}
+                  >
                     {fmtGrade(s.grade)}
                   </td>
-                  <td className="py-1.5 pr-4 text-right">{s.gainM.toFixed(0)} m</td>
+                  <td className="py-1.5 pr-4 text-right">
+                    {s.gainM.toFixed(0)} m
+                  </td>
                   <td className="py-1.5 pr-4 text-right">
                     {s.hikeFraction > 0 ? (
                       <span className="text-emerald-400">
@@ -307,7 +317,9 @@ function GpxUpload() {
                   <td className="py-1.5 pr-4 text-right">
                     {fmtPace(s.paceSecPerKm)}/km
                   </td>
-                  <td className="py-1.5 text-right">{fmtClock(s.elapsedSec)}</td>
+                  <td className="py-1.5 text-right">
+                    {fmtClock(s.elapsedSec)}
+                  </td>
                 </tr>
               ))}
             </tbody>
