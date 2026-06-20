@@ -11,12 +11,31 @@ import {
 import {
   parseGpx,
   cumulativeDistances,
-  smoothElevation,
-  elevationChange,
+  resampleEven,
+  smoothElevationByDistance,
+  cumulativeGain,
   gradients,
   computeSplits,
+  GpxError,
+  type GpxErrorCode,
   type Split,
 } from "./lib/pacing";
+
+// Friendly, distinct copy for each parse failure. Anything unrecognized falls
+// through to a generic line rather than crashing the upload path.
+const GPX_ERROR_MESSAGE: Record<GpxErrorCode, string> = {
+  invalid:
+    "This file isn't valid GPX — it couldn't be read as XML. Make sure you exported a .gpx file.",
+  "no-track":
+    "This file has no recorded track points — it looks like a route, not an activity.",
+  "too-few":
+    "This track has too few points to build a pacing plan (it needs at least two).",
+};
+
+// Elevation-processing length scales (see STATUS.md / the research notes).
+const RESAMPLE_INTERVAL_M = 10; // even spacing that kills Δdist gradient spikes
+const SMOOTH_WINDOW_M = 30; // physical low-pass; keep ≥ ~3× the resample interval
+const D_PLUS_THRESHOLD_M = 5; // hysteresis deadband for D+ (noise floor; 0 = naive sum)
 
 type Track = {
   distances: number[];
@@ -117,6 +136,7 @@ function SliderField({
 
 function GpxUpload() {
   const [track, setTrack] = useState<Track | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [paceText, setPaceText] = useState("6:00");
   const [vam, setVam] = useState(750);
   const [hikeAbovePct, setHikeAbovePct] = useState(18);
@@ -125,25 +145,53 @@ function GpxUpload() {
   function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    setError(null);
     file
       .text()
       .then((text) => {
         const points = parseGpx(text);
-        const distances = cumulativeDistances(points);
-        const smoothed = smoothElevation(points, 3);
+        // Elevation pipeline (see research notes / STATUS.md):
+        //  1. resample to even spacing → no Δdist gradient spikes (geometry only;
+        //     the timed raw points are untouched, used by the calibration path).
+        //  2. smooth elevation over a fixed PHYSICAL window → grid-independent.
+        //  3. D+ via hysteresis deadband → density-stable, noise-robust.
+        const resampled = resampleEven(
+          points,
+          cumulativeDistances(points),
+          RESAMPLE_INTERVAL_M,
+        );
+        const distances = resampled.dists;
+        const smoothed = smoothElevationByDistance(
+          resampled.points,
+          distances,
+          SMOOTH_WINDOW_M,
+        );
         const grades = gradients(smoothed, distances);
         setTrack({
           distances,
           grades,
           distanceKm: distances[distances.length - 1] / 1000,
-          gainM: elevationChange(smoothed).gain,
+          gainM: cumulativeGain(
+            smoothed.map((p) => p.ele),
+            D_PLUS_THRESHOLD_M,
+          ),
           profile: smoothed.map((p, i) => ({
             km: distances[i] / 1000,
             ele: p.ele,
           })),
         });
       })
-      .catch((err) => console.error(err));
+      .catch((err) => {
+        // Map known parse failures to friendly inline copy; anything else gets a
+        // generic message so the upload never crashes the page.
+        setTrack(null);
+        setError(
+          err instanceof GpxError
+            ? GPX_ERROR_MESSAGE[err.code]
+            : "Couldn't read this file. Please try a different GPX.",
+        );
+        console.error(err);
+      });
   }
 
   // Derive the plan from the parsed track + the effort inputs, so editing a
@@ -168,6 +216,15 @@ function GpxUpload() {
         onChange={handleFile}
         className="block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-emerald-500"
       />
+
+      {error && (
+        <div
+          role="alert"
+          className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+        >
+          {error}
+        </div>
+      )}
 
       {track && (
         <div className="mt-8 space-y-6">

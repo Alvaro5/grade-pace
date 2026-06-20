@@ -7,12 +7,29 @@ export type TrackPoint = {
   time?: number; // epoch ms; present only when the GPX carries <time> (a recorded effort)
 };
 
+// Distinct, catchable failure modes for the upload path. The UI maps `code`
+// to a friendly message; the engine stays free of any rendering concern.
+export type GpxErrorCode = "invalid" | "no-track" | "too-few";
+
+export class GpxError extends Error {
+  constructor(
+    readonly code: GpxErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GpxError";
+  }
+}
+
 export function parseGpx(xml: string): TrackPoint[] {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   if (doc.querySelector("parsererror")) {
-    throw new Error("Not a valid GPX/XML file");
+    throw new GpxError("invalid", "Not a valid GPX/XML file");
   }
   const trkpts = doc.querySelectorAll("trkpt");
+  if (trkpts.length === 0) {
+    throw new GpxError("no-track", "GPX has no <trkpt> track points");
+  }
   const points = Array.from(trkpts).map((pt) => {
     // <time> is ISO 8601 (e.g. 2025-09-13T07:00:00Z). Date.parse → epoch ms,
     // or NaN if absent/malformed. Course-planning GPX files have no timestamps,
@@ -33,6 +50,12 @@ export function parseGpx(xml: string): TrackPoint[] {
   for (const p of points) {
     if (Number.isNaN(p.ele)) p.ele = lastEle;
     else lastEle = p.ele;
+  }
+
+  // Need at least two points to form a segment (distance + gradient). A single
+  // <trkpt> can't be paced.
+  if (points.length < 2) {
+    throw new GpxError("too-few", "GPX track has fewer than 2 points");
   }
   return points;
 }
@@ -60,6 +83,51 @@ export function cumulativeDistances(points: TrackPoint[]): number[] {
   return distances;
 }
 
+// Resample the track to evenly-spaced stations (every `intervalM` meters along
+// the cumulative distance) before gradients are computed. Raw GPS fixes sit ~2–3 m
+// apart and near-coincident pairs make Δele/Δdist explode (spikes of hundreds of
+// %); a fixed denominator kills those. Stations are linearly interpolated, so we
+// never invent elevation — important when the whole point is to REMOVE spurious D+.
+//
+// Geometry only: the returned points carry no `time`. The timing path
+// (actualSegmentTimes) must keep running on the raw, truly-timed points — never
+// these. Returned `dists` are exact by construction (i·interval, last = total);
+// we do NOT re-derive them via Haversine on interpolated coords.
+export function resampleEven(
+  points: TrackPoint[],
+  dists: number[],
+  intervalM: number,
+): { points: TrackPoint[]; dists: number[] } {
+  if (intervalM <= 0) throw new Error("resampleEven: intervalM must be > 0");
+  const total = dists[dists.length - 1];
+  if (points.length < 2 || total === 0) return { points, dists }; // nothing to resample
+
+  const out: TrackPoint[] = [];
+  const outDists: number[] = [];
+  let hi = 1; // bracketing upper index; d is monotonic so this only moves forward
+  for (let d = 0; d < total; d += intervalM) {
+    while (hi < points.length - 1 && dists[hi] < d) hi++;
+    const lo = hi - 1;
+    const span = dists[hi] - dists[lo] || 1; // guard coincident points (span 0)
+    const t = (d - dists[lo]) / span;
+    const a = points[lo];
+    const b = points[hi];
+    out.push({
+      lat: a.lat + (b.lat - a.lat) * t,
+      lon: a.lon + (b.lon - a.lon) * t,
+      ele: a.ele + (b.ele - a.ele) * t,
+    });
+    outDists.push(d);
+  }
+  // Always close on the exact final raw point so total distance is preserved
+  // (the last segment is a partial interval).
+  const last = points[points.length - 1];
+  out.push({ lat: last.lat, lon: last.lon, ele: last.ele });
+  outDists.push(total);
+
+  return { points: out, dists: outDists };
+}
+
 export function smoothElevation(
   points: TrackPoint[],
   windowSize: number,
@@ -75,6 +143,34 @@ export function smoothElevation(
   });
 }
 
+// Smooth elevation over a fixed PHYSICAL window (meters), not a point count. The
+// old `smoothElevation(window=3)` averages 3 samples regardless of spacing, so its
+// real reach swings with GPS density — on a dense 2.5 m track it smooths ~7 m, on a
+// sparse 20 m track ~60 m, which is why D+ moved when we changed the grid. Anchoring
+// the window to a distance makes the low-pass scale explicit and grid-independent.
+// On an even 10 m grid, windowM=30 averages points within ±15 m ≈ the old window-3.
+export function smoothElevationByDistance(
+  points: TrackPoint[],
+  dists: number[],
+  windowM: number,
+): TrackPoint[] {
+  const half = windowM / 2;
+  return points.map((pt, i) => {
+    let sum = 0;
+    let n = 0;
+    // walk out in both directions while still inside the half-window
+    for (let j = i; j >= 0 && dists[i] - dists[j] <= half; j--) {
+      sum += points[j].ele;
+      n++;
+    }
+    for (let k = i + 1; k < points.length && dists[k] - dists[i] <= half; k++) {
+      sum += points[k].ele;
+      n++;
+    }
+    return { ...pt, ele: sum / n };
+  });
+}
+
 export function elevationChange(points: TrackPoint[]): {
   gain: number;
   loss: number;
@@ -87,6 +183,32 @@ export function elevationChange(points: TrackPoint[]): {
     else loss += delta; // delta is negative here, so loss stays negative
   }
   return { gain, loss };
+}
+
+// Density-stable cumulative elevation gain (D+) via a hysteresis "deadband":
+// only bank a climb once it rises more than `thresholdM` above the last confirmed
+// reference; reversals deeper than the band re-anchor the reference downward, so
+// wiggles smaller than the band (GPS/baro noise) never count. This is the
+// industry-standard fix for the coastline paradox — naive Σ(positive Δele) keeps
+// rising as you add points (Strava uses 10 m without baro / 2 m with; swisstopo
+// notes ~5 m accuracy makes sub-5 m diffs meaningless). With `thresholdM = 0` this
+// reduces exactly to the naive sum (== elevationChange().gain), so it's a strict
+// generalization. Takes a plain elevation array (already smoothed/resampled).
+export function cumulativeGain(eles: number[], thresholdM: number): number {
+  if (eles.length < 2) return 0;
+  let gain = 0;
+  let ref = eles[0]; // last confirmed reference (a banked top or a fresh valley)
+  for (const e of eles) {
+    const delta = e - ref;
+    if (delta > thresholdM) {
+      gain += delta; // climbed clear of the band — bank it and step the reference up
+      ref = e;
+    } else if (delta < 0) {
+      ref = e; // new low — re-anchor down so the next climb is measured from here
+    }
+    // 0 ≤ delta ≤ thresholdM: within the band, treat as noise and ignore
+  }
+  return gain;
 }
 
 export function gradients(points: TrackPoint[], dists: number[]): number[] {

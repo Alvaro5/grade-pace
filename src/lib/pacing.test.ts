@@ -6,8 +6,14 @@ import {
   minettiCost,
   computeSplits,
   parseGpx,
+  GpxError,
   actualSegmentTimes,
   calibrateTerrainFactor,
+  resampleEven,
+  smoothElevation,
+  smoothElevationByDistance,
+  elevationChange,
+  cumulativeGain,
   gradients,
   cumulativeDistances,
   type TrackPoint,
@@ -178,6 +184,42 @@ describe("timestamp capture (self-calibration input)", () => {
   });
 });
 
+describe("parseGpx failure modes (graceful upload path)", () => {
+  it("throws GpxError 'invalid' on non-XML / malformed input", () => {
+    try {
+      parseGpx("this is not xml at all <<<");
+      throw new Error("expected parseGpx to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(GpxError);
+      expect((e as GpxError).code).toBe("invalid");
+    }
+  });
+
+  it("throws GpxError 'no-track' on a route/waypoint-only file (no <trkpt>)", () => {
+    // Valid XML, but a route export: <rtept>/<wpt> only, zero track points.
+    const route =
+      `<gpx><rte><rtept lat="48.4" lon="2.6"><ele>100</ele></rtept>` +
+      `<rtept lat="48.401" lon="2.6"><ele>110</ele></rtept></rte></gpx>`;
+    try {
+      parseGpx(route);
+      throw new Error("expected parseGpx to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(GpxError);
+      expect((e as GpxError).code).toBe("no-track");
+    }
+  });
+
+  it("throws GpxError 'too-few' on a single-point track", () => {
+    try {
+      parseGpx(gpx([[48.4, 2.6, 100]]));
+      throw new Error("expected parseGpx to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(GpxError);
+      expect((e as GpxError).code).toBe("too-few");
+    }
+  });
+});
+
 describe("calibrateTerrainFactor", () => {
   const FLAT = 360;
   const VAM = 750;
@@ -219,5 +261,119 @@ describe("calibrateTerrainFactor", () => {
     expect(
       calibrateTerrainFactor(points, dists, grades, FLAT, VAM, GATE),
     ).toBeNull();
+  });
+});
+
+describe("resampleEven", () => {
+  // A straight +10% ramp sampled at UNEVEN raw distances. Elevation is linear in
+  // cumulative distance, so a correct resample keeps it linear → constant gradient
+  // (the whole point: no near-coincident-point spikes). Total 95 m is not a
+  // multiple of 10, so the final station is a partial interval.
+  const rawDists = [0, 7, 23, 50, 78, 95];
+  const ELE = (d: number) => 0.1 * d;
+  const rawPoints: TrackPoint[] = rawDists.map((d) => ({
+    lat: 48 + d / 1e5,
+    lon: 2,
+    ele: ELE(d),
+  }));
+
+  it("produces evenly-spaced stations with a partial final interval", () => {
+    const { dists } = resampleEven(rawPoints, rawDists, 10);
+    expect(dists[0]).toBe(0);
+    for (let i = 1; i < dists.length - 1; i++) {
+      expect(dists[i] - dists[i - 1]).toBeCloseTo(10, 9);
+    }
+    const lastGap = dists[dists.length - 1] - dists[dists.length - 2];
+    expect(lastGap).toBeGreaterThan(0);
+    expect(lastGap).toBeLessThanOrEqual(10);
+  });
+
+  it("linearly interpolates ele → constant gradient (spike removal)", () => {
+    const { points, dists } = resampleEven(rawPoints, rawDists, 10);
+    points.forEach((p, i) => expect(p.ele).toBeCloseTo(ELE(dists[i]), 6));
+    for (const grade of gradients(points, dists)) {
+      expect(grade).toBeCloseTo(0.1, 9);
+    }
+  });
+
+  it("preserves the start and the exact final point (total distance)", () => {
+    const { points, dists } = resampleEven(rawPoints, rawDists, 10);
+    expect(dists[0]).toBe(0);
+    expect(points[0].ele).toBeCloseTo(ELE(0), 9);
+    expect(dists[dists.length - 1]).toBeCloseTo(95, 9);
+    expect(points[points.length - 1].ele).toBeCloseTo(ELE(95), 9);
+  });
+
+  it("carries no timestamps — geometry only, never the timing path", () => {
+    const { points } = resampleEven(rawPoints, rawDists, 10);
+    expect(points.every((p) => p.time === undefined)).toBe(true);
+  });
+
+  it("returns degenerate tracks unchanged", () => {
+    const one: TrackPoint[] = [{ lat: 0, lon: 0, ele: 0 }];
+    expect(resampleEven(one, [0], 10).points).toBe(one); // single point, total 0
+    expect(resampleEven([], [], 10).points).toEqual([]);
+  });
+
+  it("throws on a non-positive interval", () => {
+    expect(() => resampleEven(rawPoints, rawDists, 0)).toThrow();
+  });
+});
+
+describe("smoothElevationByDistance", () => {
+  it("reduces to window-3 MA on an even 10 m grid when windowM=30", () => {
+    const eles = [0, 5, 2, 9, 4, 7, 3];
+    const dists = eles.map((_, i) => i * 10);
+    const pts: TrackPoint[] = eles.map((ele) => ({ lat: 1, lon: 2, ele }));
+    const byDist = smoothElevationByDistance(pts, dists, 30);
+    const byCount = smoothElevation(pts, 3);
+    byDist.forEach((p, i) => expect(p.ele).toBeCloseTo(byCount[i].ele, 9));
+    expect(byDist[0].lat).toBe(1); // lat/lon preserved
+  });
+
+  it("leaves a straight ramp unchanged at interior points (line in → line out)", () => {
+    const dists = [0, 10, 20, 30, 40];
+    const pts: TrackPoint[] = dists.map((d) => ({ lat: 0, lon: 0, ele: 0.1 * d }));
+    const out = smoothElevationByDistance(pts, dists, 30);
+    // Endpoints get a one-sided window (like any centered MA) so they shift; the
+    // line-preserving property holds where the window is symmetric.
+    for (let i = 1; i < dists.length - 1; i++) {
+      expect(out[i].ele).toBeCloseTo(0.1 * dists[i], 9);
+    }
+  });
+});
+
+describe("cumulativeGain", () => {
+  const asPoints = (eles: number[]): TrackPoint[] =>
+    eles.map((ele) => ({ lat: 0, lon: 0, ele }));
+
+  it("equals the naive positive-sum when threshold is 0", () => {
+    const eles = [0, 10, 7, 20, 18, 25]; // positive diffs: 10 + 13 + 7 = 30
+    expect(cumulativeGain(eles, 0)).toBeCloseTo(
+      elevationChange(asPoints(eles)).gain,
+      9,
+    );
+  });
+
+  it("ignores oscillations smaller than the threshold (coastline noise)", () => {
+    const eles = [100, 101, 99, 100.5, 98.5, 100]; // jitter well under 3 m
+    expect(cumulativeGain(eles, 3)).toBe(0);
+  });
+
+  it("still banks a real climb made of sub-threshold steps", () => {
+    const eles = Array.from({ length: 101 }, (_, i) => i); // 0→100 in 1 m steps
+    const g = cumulativeGain(eles, 3);
+    expect(g).toBeGreaterThan(100 - 3);
+    expect(g).toBeLessThanOrEqual(100);
+  });
+
+  it("measures re-ascents from the valley (up-down-up)", () => {
+    const eles = [0, 50, 0, 50, 0]; // two genuine 50 m climbs
+    expect(cumulativeGain(eles, 3)).toBeGreaterThan(100 - 6);
+  });
+
+  it("returns 0 for degenerate input", () => {
+    expect(cumulativeGain([], 3)).toBe(0);
+    expect(cumulativeGain([42], 3)).toBe(0);
   });
 });

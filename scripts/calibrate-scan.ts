@@ -23,7 +23,8 @@ const win = new Window();
 const {
   parseGpx,
   cumulativeDistances,
-  smoothElevation,
+  resampleEven,
+  smoothElevationByDistance,
   gradients,
   minettiCost,
   actualSegmentTimes,
@@ -96,13 +97,19 @@ for (const file of files) {
   const name = basename(file);
   try {
     const points = parseGpx(readFileSync(file, "utf8"));
-    const dists = cumulativeDistances(points);
-    // Match the app pipeline: smooth elevation (centered MA, window 3) → grades.
-    const grades = gradients(smoothElevation(points, 3), dists);
+    // Match the app pipeline: resample to even 10 m → smooth (window 3) → grades.
+    // Geometry runs on the resampled track; the timing path (actualSegmentTimes)
+    // stays on the raw, truly-timed points.
+    const resampled = resampleEven(points, cumulativeDistances(points), 10);
+    const dists = resampled.dists;
+    const grades = gradients(
+      smoothElevationByDistance(resampled.points, dists, 30),
+      dists,
+    );
 
     const factor = calibrateTerrainFactor(
-      points,
-      dists,
+      points, // raw points → actual total (real <time>)
+      dists, // resampled geometry → predicted total
       grades,
       FLAT,
       VAM,
