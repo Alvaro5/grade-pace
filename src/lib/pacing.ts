@@ -12,11 +12,10 @@ export type TrackPoint = {
 export type GpxErrorCode = "invalid" | "no-track" | "too-few";
 
 export class GpxError extends Error {
-  constructor(
-    readonly code: GpxErrorCode,
-    message: string,
-  ) {
+  readonly code: GpxErrorCode;
+  constructor(code: GpxErrorCode, message: string) {
     super(message);
+    this.code = code;
     this.name = "GpxError";
   }
 }
