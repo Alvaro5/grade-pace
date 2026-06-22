@@ -20,6 +20,9 @@ import {
   type GpxErrorCode,
   type Split,
 } from "./lib/pacing";
+import { fmtClock, fmtPace } from "./lib/format";
+import { buildShareCardSvg, type ShareCardData } from "./lib/shareCard";
+import { svgToPng } from "./lib/rasterize";
 
 // Friendly, distinct copy for each parse failure. Anything unrecognized falls
 // through to a generic line rather than crashing the upload path.
@@ -79,18 +82,6 @@ function buildTrack(text: string): Track {
     })),
   };
 }
-
-const pad = (n: number) => String(n).padStart(2, "0");
-
-const fmtClock = (s: number) => {
-  const t = Math.round(s);
-  return `${Math.floor(t / 3600)}:${pad(Math.floor((t % 3600) / 60))}:${pad(t % 60)}`;
-};
-
-const fmtPace = (s: number) => {
-  const t = Math.round(s);
-  return `${Math.floor(t / 60)}:${pad(t % 60)}`;
-};
 
 const fmtGrade = (g: number) => `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
 
@@ -182,6 +173,10 @@ function GpxUpload() {
   const [vam, setVam] = useState(750);
   const [hikeAbovePct, setHikeAbovePct] = useState(18);
   const [terrainFactor, setTerrainFactor] = useState(1.0);
+  // Course name shown on the shareable image; prefilled on load, editable.
+  const [title, setTitle] = useState("");
+  const [sharing, setSharing] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   // Run any GPX text through the pipeline and reflect the result (or a friendly
   // error) in state. Shared by file upload and the bundled example so both take
@@ -204,6 +199,7 @@ function GpxUpload() {
   function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
+    setTitle(file.name.replace(/\.gpx$/i, ""));
     loadGpx(file.text(), "Couldn't read this file. Please try a different GPX.");
   }
 
@@ -211,6 +207,7 @@ function GpxUpload() {
   // visitor who clicks "Try an example" pays for it. BASE_URL keeps the path
   // correct under any Vite base/deploy subpath.
   function loadExample() {
+    setTitle("Imperial Trail");
     loadGpx(
       fetch(`${import.meta.env.BASE_URL}example-imperial-trail.gpx`).then(
         (res) => {
@@ -235,6 +232,59 @@ function GpxUpload() {
       )
     : [];
   const timeSec = splits.length ? splits[splits.length - 1].elapsedSec : 0;
+
+  // Render the current plan to a branded PNG and share it (native share sheet
+  // when available, e.g. mobile) or download it. Every shared card carries the
+  // GradePace mark + site URL — the growth loop.
+  async function handleShare() {
+    if (!track || !splits.length) return;
+    setSharing(true);
+    setShareError(null);
+    try {
+      const totalKm = track.distanceKm;
+      const hikeMeters = splits.reduce(
+        (sum, s) => sum + s.hikeFraction * s.distanceKm * 1000,
+        0,
+      );
+      const data: ShareCardData = {
+        title: title.trim() || "Race plan",
+        distanceKm: track.distanceKm,
+        gainM: track.gainM,
+        timeSec,
+        hikePct: totalKm > 0 ? (hikeMeters / (totalKm * 1000)) * 100 : 0,
+        avgPaceSecPerKm: totalKm > 0 ? timeSec / totalKm : 0,
+        profile: track.profile,
+        siteUrl: window.location.host,
+      };
+      const blob = await svgToPng(buildShareCardSvg(data), 1200, 630);
+      const file = new File([blob], "gradepace-plan.png", {
+        type: "image/png",
+      });
+      const shareData = {
+        files: [file],
+        title: `${data.title} — GradePace`,
+        text: `My ${data.title} race plan — built with GradePace`,
+      };
+      if (navigator.canShare?.(shareData)) {
+        await navigator.share(shareData);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "gradepace-plan.png";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      // The user dismissing the native share sheet is not an error.
+      if (!(err instanceof DOMException && err.name === "AbortError")) {
+        console.error(err);
+        setShareError("Couldn't create the share image. Please try again.");
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
 
   return (
     <>
@@ -387,6 +437,43 @@ function GpxUpload() {
               value={`${track.gainM.toFixed(0)} m`}
             />
             <StatCard label="Projected time" value={fmtClock(timeSec)} />
+          </div>
+
+          {/* Share/export: render the plan to a branded PNG. The course name
+              feeds the image title; siteUrl is taken at runtime so the
+              watermark is correct on any domain. */}
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+            <div className="flex flex-wrap items-end gap-4">
+              <label className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
+                <span className="text-zinc-300">Course name</span>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Name your race"
+                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 focus:border-emerald-500 focus:outline-none"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleShare}
+                disabled={sharing}
+                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {sharing ? "Creating image…" : "Share image"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-zinc-500">
+              Download a shareable image of your plan — distance, climb, and
+              projected finish.
+            </p>
+            {shareError && (
+              <div
+                role="alert"
+                className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
+              >
+                {shareError}
+              </div>
+            )}
           </div>
 
           {/* On a phone six columns can't fit; let the table keep a readable
