@@ -21,7 +21,11 @@ export type ShareCardData = {
   avgPaceSecPerKm: number;
   profile: { km: number; ele: number }[];
   siteUrl: string;
+  units?: "metric" | "imperial"; // display units; data stays metric. Default metric.
 };
+
+const KM_PER_MI = 1.609344;
+const FT_PER_M = 3.28084;
 
 const W = 1200;
 const H = 630;
@@ -92,9 +96,16 @@ export function buildShareCardSvg(d: ShareCardData): string {
   const { line, area } = profilePaths(d.profile);
   const title = esc(truncate(d.title.trim() || "Race plan", 28));
   const finish = fmtClock(d.timeSec);
-  const dist = `${d.distanceKm.toFixed(1)} km`;
-  const gain = `${Math.round(d.gainM).toLocaleString("en-US")} m`;
-  const pace = `${fmtPace(d.avgPaceSecPerKm)}/km`;
+  const imperial = d.units === "imperial";
+  const dist = imperial
+    ? `${(d.distanceKm / KM_PER_MI).toFixed(1)} mi`
+    : `${d.distanceKm.toFixed(1)} km`;
+  const gain = imperial
+    ? `${Math.round(d.gainM * FT_PER_M).toLocaleString("en-US")} ft`
+    : `${Math.round(d.gainM).toLocaleString("en-US")} m`;
+  const pace = imperial
+    ? `${fmtPace(d.avgPaceSecPerKm * KM_PER_MI)}/mi`
+    : `${fmtPace(d.avgPaceSecPerKm)}/km`;
   const hike = `${Math.round(d.hikePct)}%`;
   const site = esc(d.siteUrl);
 

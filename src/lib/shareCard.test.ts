@@ -29,6 +29,14 @@ describe("buildShareCardSvg", () => {
     expect(svg).toContain("trail-app-two.vercel.app");
   });
 
+  it("converts the stat strip to imperial units when asked", () => {
+    const svg = buildShareCardSvg({ ...base, units: "imperial" });
+    expect(svg).toContain("15.8 mi"); // 25.4 km
+    expect(svg).toContain("4,049 ft"); // 1234 m
+    expect(svg).toContain("/mi");
+    expect(svg).not.toContain("25.4 km");
+  });
+
   it("renders the expect-range line only when a range is provided", () => {
     expect(buildShareCardSvg(base)).not.toContain("expect");
     const withRange = buildShareCardSvg({

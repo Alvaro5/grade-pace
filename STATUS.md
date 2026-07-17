@@ -220,6 +220,32 @@
     dashboard wiring that unit tests couldn't see. Chart module stubbed
     (happy-dom has no layout engine).
 
+- **Cold-start terrain prior — investigated, NOT shipped (negative result).**
+  Tested three course-derivable signals against the four measured factors
+  (`scripts/prior-scan.ts`, kept for re-testing): elevation roughness
+  (mean |Δgrade| per 10 m), steep fraction (|grade|>12%), and bearing-change
+  rate (horizontal twistiness). None correlates: the flat quais road shows
+  MORE elevation roughness than the trail runs (urban GPS multipath), the
+  twistiest course has the lowest factor, the steepest a ≈1.0 factor. Also
+  systematic: race-course files carry smooth DEM elevations vs noisy GPS on
+  recorded runs, so "roughness" measures elevation provenance, not terrain.
+  Decision: default stays ×1.00; the asymmetric range (−8/+10%) is the honest
+  cold-start story. Re-test when more calibrated efforts exist (post-race).
+  Open one-line option (owner's call): set the uncalibrated default to the
+  personal measured mean ≈×1.04.
+
+- **Units toggle (km/mi).** Engine stays 100% metric; imperial is a display
+  concern plus one engine knob: `computeSplits` gained `bucketMeters`
+  (default 1000; 1609.344 in imperial → REAL per-mile splits, not relabeled
+  km; total time invariant to bucketing, unit-tested). Toggle in the
+  "Your pace" card converts the pace text in place (6:00/km ↔ 9:39/mi — whole-
+  second rounding shifts the projection a few seconds, inherent to a text
+  field), flips chart axes (ft/mi via converted data so ticks land round),
+  stats, table headers, D+ (ft), VAM display (ft/h; slider still m/h
+  internally), and the share card (`units` field). Default: en-US locale →
+  imperial, else metric; persisted in localStorage (guarded — storage can
+  throw in private browsing). `switch-units` analytics event.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

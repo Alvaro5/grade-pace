@@ -338,6 +338,24 @@ describe("calibrateTerrainFactor", () => {
   });
 });
 
+describe("computeSplits bucketMeters", () => {
+  // ~2.01 miles of flat course in 100 m segments.
+  const dists = Array.from({ length: 33 }, (_, i) => i * 100.5);
+  const grades = Array.from({ length: 32 }, () => 0);
+
+  it("buckets by miles when asked, with total time invariant", () => {
+    const km = computeSplits(dists, grades, 360, 750, 0.18, 1);
+    const mi = computeSplits(dists, grades, 360, 750, 0.18, 1, 1609.344);
+    expect(mi.length).toBe(2); // 3216 m → one full mile + a partial
+    expect(mi[0].distanceKm * 1000).toBeGreaterThanOrEqual(1609.344);
+    // Same course, same physics — bucketing must not change the finish time.
+    expect(mi[mi.length - 1].elapsedSec).toBeCloseTo(
+      km[km.length - 1].elapsedSec,
+      6,
+    );
+  });
+});
+
 describe("finishRange", () => {
   it("brackets the central estimate with the uncalibrated band (−8%/+10%)", () => {
     const r = finishRange(10000, false);

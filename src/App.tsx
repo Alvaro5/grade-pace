@@ -128,6 +128,26 @@ const titleFromFilename = (name: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+// Display units. Engine math is metric everywhere; imperial converts only at
+// the presentation layer (and switches the splits table to mile buckets).
+type Units = "metric" | "imperial";
+const KM_PER_MI = 1.609344;
+const FT_PER_M = 3.28084;
+const MILE_M = 1609.344;
+
+function initialUnits(): Units {
+  // Storage can be absent or throw (private browsing, test envs) — the
+  // preference is a nicety, never worth crashing over.
+  try {
+    const saved = localStorage.getItem("gp-units");
+    if (saved === "metric" || saved === "imperial") return saved;
+  } catch {
+    /* fall through to the locale default */
+  }
+  // US visitors think in miles; everyone else gets metric.
+  return navigator.language === "en-US" ? "imperial" : "metric";
+}
+
 const inputClass =
   "w-28 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 tabular-nums focus:border-emerald-500 focus:outline-none";
 
@@ -202,7 +222,11 @@ function SliderField({
 function GpxUpload() {
   const [track, setTrack] = useState<Track | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [paceText, setPaceText] = useState("6:00");
+  const [units, setUnits] = useState<Units>(initialUnits);
+  // A sensible easy default in the active unit (6:00/km ≈ 9:39/mi).
+  const [paceText, setPaceText] = useState(
+    units === "imperial" ? "9:40" : "6:00",
+  );
   const [vam, setVam] = useState(750);
   const [hikeAbovePct, setHikeAbovePct] = useState(18);
   const [terrainFactor, setTerrainFactor] = useState(1.0);
@@ -224,16 +248,57 @@ function GpxUpload() {
   // typo) the plan keeps using the last valid pace instead of silently
   // resetting, and the field shows an inline invalid state. The last valid
   // value is state, updated in onChange — not a ref written during render.
-  const [lastValidPaceSec, setLastValidPaceSec] = useState(360);
+  const [lastValidPaceSec, setLastValidPaceSec] = useState(
+    units === "imperial" ? 580 : 360,
+  );
   const paceSec = parsePace(paceText);
   const paceValid = !Number.isNaN(paceSec);
   const effectivePaceSec = paceValid ? paceSec : lastValidPaceSec;
+  // Entered pace is in the active unit; the engine always takes sec/km.
+  const enginePaceSecPerKm =
+    units === "imperial" ? effectivePaceSec / KM_PER_MI : effectivePaceSec;
 
   function handlePaceChange(text: string) {
     setPaceText(text);
     const sec = parsePace(text);
     if (!Number.isNaN(sec)) setLastValidPaceSec(sec);
   }
+
+  function switchUnits(next: Units) {
+    if (next === units) return;
+    setUnits(next);
+    try {
+      localStorage.setItem("gp-units", next);
+    } catch {
+      /* storage unavailable — the toggle still works for this session */
+    }
+    // Convert the pace field so the physical pace stays the same
+    // (6:00/km ↔ 9:39/mi), instead of silently reinterpreting the number.
+    const converted = Math.round(
+      next === "imperial"
+        ? effectivePaceSec * KM_PER_MI
+        : effectivePaceSec / KM_PER_MI,
+    );
+    setPaceText(fmtPace(converted));
+    setLastValidPaceSec(converted);
+    trackEvent("switch-units", { to: next });
+  }
+
+  // Display helpers for the active unit — data underneath stays metric.
+  const distStr = (km: number) =>
+    units === "imperial"
+      ? `${(km / KM_PER_MI).toFixed(2)} mi`
+      : `${km.toFixed(2)} km`;
+  const gainStr = (m: number) =>
+    units === "imperial"
+      ? `${Math.round(m * FT_PER_M)} ft`
+      : `${m.toFixed(0)} m`;
+  const paceStr = (secPerKm: number) =>
+    units === "imperial"
+      ? `${fmtPace(secPerKm * KM_PER_MI)}/mi`
+      : `${fmtPace(secPerKm)}/km`;
+  const bucketMeters = units === "imperial" ? MILE_M : 1000;
+  const bucketKm = bucketMeters / 1000;
 
   // Fit the terrain factor against a recorded run: run the forward model (at
   // ×1.00) over THAT run's course with the current pace inputs, then divide the
@@ -263,7 +328,7 @@ function GpxUpload() {
           points,
           dists,
           grades,
-          effectivePaceSec,
+          enginePaceSecPerKm,
           Math.max(1, vam),
           hikeAbovePct / 100,
         );
@@ -417,10 +482,11 @@ function GpxUpload() {
     ? computeSplits(
         track.distances,
         track.grades,
-        effectivePaceSec,
+        enginePaceSecPerKm,
         Math.max(1, vam),
         hikeAbovePct / 100,
         terrainFactor,
+        bucketMeters,
       )
     : [];
   const timeSec = splits.length ? splits[splits.length - 1].elapsedSec : 0;
@@ -451,6 +517,7 @@ function GpxUpload() {
         avgPaceSecPerKm: totalKm > 0 ? timeSec / totalKm : 0,
         profile: track.profile,
         siteUrl: window.location.host,
+        units,
       };
       const blob = await svgToPng(buildShareCardSvg(data), 1200, 630);
       const file = new File([blob], "gradepace-plan.png", {
@@ -537,13 +604,31 @@ function GpxUpload() {
             </div>
           )}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-              Your pace
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Your pace
+              </h2>
+              <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs">
+                {(["metric", "imperial"] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    onClick={() => switchUnits(u)}
+                    className={`px-2.5 py-1 font-medium ${
+                      units === u
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    {u === "metric" ? "km" : "mi"}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mt-3">
               <Field
                 label="Your easy flat-road pace"
-                hint="min/km — a pace you could hold for hours on flat ground. We adjust it for every hill on the course."
+                hint={`min/${units === "imperial" ? "mile" : "km"} — a pace you could hold for hours on flat ground. We adjust it for every hill on the course.`}
               >
                 <input
                   value={paceText}
@@ -553,8 +638,9 @@ function GpxUpload() {
                 />
                 {!paceValid && (
                   <span className="text-xs text-rose-400">
-                    Enter a pace like 6:30 — still using{" "}
-                    {fmtPace(effectivePaceSec)}/km.
+                    Enter a pace like {units === "imperial" ? "9:40" : "6:30"}{" "}
+                    — still using {fmtPace(effectivePaceSec)}/
+                    {units === "imperial" ? "mi" : "km"}.
                   </span>
                 )}
               </Field>
@@ -569,8 +655,12 @@ function GpxUpload() {
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-4">
                 <SliderField
                   label="Uphill hiking speed"
-                  hint="how fast you climb when power-hiking, in vertical metres per hour"
-                  display={`${vam} m/h`}
+                  hint={`how fast you climb when power-hiking, in vertical ${units === "imperial" ? "feet" : "metres"} per hour`}
+                  display={
+                    units === "imperial"
+                      ? `${Math.round(vam * FT_PER_M)} ft/h`
+                      : `${vam} m/h`
+                  }
                   value={vam}
                   min={300}
                   max={1200}
@@ -637,7 +727,7 @@ function GpxUpload() {
                   <span className="font-medium text-zinc-100">
                     {calib.fileName}
                   </span>{" "}
-                  — {calib.distanceKm.toFixed(1)} km, moving{" "}
+                  — {distStr(calib.distanceKm)}, moving{" "}
                   {fmtClock(calib.movingSec)}
                   {calib.elapsedSec - calib.movingSec >= 60 &&
                     ` (${fmtClock(calib.elapsedSec)} on the clock — stops removed)`}
@@ -677,19 +767,13 @@ function GpxUpload() {
             {/* Fixed-height fallback so the layout doesn't jump when the
                 chart chunk arrives. */}
             <Suspense fallback={<div className="h-40" />}>
-              <ElevationChart profile={track.profile} />
+              <ElevationChart profile={track.profile} units={units} />
             </Suspense>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatCard
-              label="Distance"
-              value={`${track.distanceKm.toFixed(2)} km`}
-            />
-            <StatCard
-              label="Elevation gain"
-              value={`${track.gainM.toFixed(0)} m`}
-            />
+            <StatCard label="Distance" value={distStr(track.distanceKm)} />
+            <StatCard label="Elevation gain" value={gainStr(track.gainM)} />
             {/* The range IS the product thesis: a to-the-second finish would
                 be false precision. Center = the model's central estimate. */}
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
@@ -757,7 +841,9 @@ function GpxUpload() {
             <table className="w-full min-w-[34rem] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-zinc-700 text-xs uppercase tracking-wider text-zinc-400">
-                  <th className="py-2 pr-4 text-left font-medium">km</th>
+                  <th className="py-2 pr-4 text-left font-medium">
+                    {units === "imperial" ? "mi" : "km"}
+                  </th>
                   <th className="py-2 pr-4 text-right font-medium">grade</th>
                   <th className="py-2 pr-4 text-right font-medium">D+</th>
                   <th className="py-2 pr-4 text-right font-medium">hike</th>
@@ -773,8 +859,8 @@ function GpxUpload() {
                   >
                     <td className="py-1.5 pr-4">
                       {s.km}
-                      {s.distanceKm < 0.95
-                        ? ` (${s.distanceKm.toFixed(2)})`
+                      {s.distanceKm < bucketKm * 0.95
+                        ? ` (${(units === "imperial" ? s.distanceKm / KM_PER_MI : s.distanceKm).toFixed(2)})`
                         : ""}
                     </td>
                     <td
@@ -783,7 +869,7 @@ function GpxUpload() {
                       {fmtGrade(s.grade)}
                     </td>
                     <td className="py-1.5 pr-4 text-right">
-                      {s.gainM.toFixed(0)} m
+                      {gainStr(s.gainM)}
                     </td>
                     <td className="py-1.5 pr-4 text-right">
                       {s.hikeFraction > 0 ? (
@@ -795,7 +881,7 @@ function GpxUpload() {
                       )}
                     </td>
                     <td className="py-1.5 pr-4 text-right">
-                      {fmtPace(s.paceSecPerKm)}/km
+                      {paceStr(s.paceSecPerKm)}
                     </td>
                     <td className="py-1.5 text-right">
                       {fmtClock(s.elapsedSec)}

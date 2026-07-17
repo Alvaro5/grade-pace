@@ -320,15 +320,19 @@ function segmentTimeSec(
 }
 
 export type Split = {
-  km: number; // 1, 2, 3, ... (the final entry may be a partial km)
-  distanceKm: number; // actual length — ~1, last is partial
-  grade: number; // net grade across the km (rise / run)
-  gainM: number; // D+ climbed within the km (positive rises only)
-  hikeFraction: number; // 0–1: share of the km spent power-hiking
-  paceSecPerKm: number;
-  elapsedSec: number; // cumulative time at the end of this km
+  km: number; // bucket index 1, 2, 3, … (the final entry may be partial)
+  distanceKm: number; // actual bucket length in KM — ~1 (or ~1.61 for mile buckets)
+  grade: number; // net grade across the bucket (rise / run)
+  gainM: number; // D+ climbed within the bucket (positive rises only)
+  hikeFraction: number; // 0–1: share of the bucket spent power-hiking
+  paceSecPerKm: number; // always sec/km — display layers convert to /mi
+  elapsedSec: number; // cumulative time at the end of this bucket
 };
 
+// `bucketMeters` sets the split length (1000 = km splits, 1609.344 = mile
+// splits). Everything stays metric internally — Split fields are km and
+// sec/km regardless; only the bucketing changes. Total time is invariant to
+// the bucket size (same segments, same sum).
 export function computeSplits(
   dists: number[],
   grades: number[],
@@ -336,6 +340,7 @@ export function computeSplits(
   hikeVamMperH: number,
   transitionGrade: number,
   terrainFactor: number,
+  bucketMeters = 1000,
 ): Split[] {
   const splits: Split[] = [];
   let kmMeters = 0;
@@ -385,7 +390,7 @@ export function computeSplits(
     kmTimeSec += adjSec;
     elapsedSec += adjSec;
 
-    if (kmMeters >= 1000) flush(); // close the bucket once we've banked a km
+    if (kmMeters >= bucketMeters) flush(); // close the bucket once it's full
   }
 
   if (kmMeters > 0) flush(); // final partial km
