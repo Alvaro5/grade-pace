@@ -150,6 +150,18 @@
   product pitch ("most planners assume you run every hill") + a
   stays-in-your-browser privacy line instead of the feature list.
 
+- **Route GPX support (`<rtept>` fallback) + no-elevation guard.** `parseGpx`
+  now falls back to route points when a file has no `<trkpt>` — race organizers
+  publish courses as routes, and a route paces exactly like an untimed track.
+  Bundled decision: a file whose points ALL lack `<ele>` (common in route
+  exports) throws a new `GpxError` code `no-elevation` instead of pacing a
+  silently flat course — the friendly message says to re-export with elevation.
+  Tests: route-only parses, `trkpt` preferred over `rtept` when both exist,
+  waypoint-only still `no-track`, all-missing-ele → `no-elevation`.
+- **Footer with backlinks.** "Built by Alvaro Serero … open source on GitHub" —
+  closes the X-post → app → follow loop. Outbound clicks tracked via Umami
+  `data-umami-event` attributes (`click-x`, `click-github`), no JS needed.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

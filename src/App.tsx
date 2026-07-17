@@ -32,9 +32,11 @@ const GPX_ERROR_MESSAGE: Record<GpxErrorCode, string> = {
   invalid:
     "This file isn't valid GPX — it couldn't be read as XML. Make sure you exported a .gpx file.",
   "no-track":
-    "This file has no recorded track points — it looks like a route, not an activity.",
+    "This file has no track or route points — there's nothing to pace in it.",
   "too-few":
     "This track has too few points to build a pacing plan (it needs at least two).",
+  "no-elevation":
+    "This file has no elevation data, so the plan can't be grade-adjusted. Re-export the GPX with elevation included — most route planners have that option.",
 };
 
 // Elevation-processing length scales (see STATUS.md / the research notes).
@@ -622,6 +624,31 @@ function App() {
         <div className="mt-6">
           <GpxUpload />
         </div>
+        <footer className="mt-14 border-t border-zinc-800 pt-6 text-sm text-zinc-500">
+          <p>
+            Built by{" "}
+            <a
+              href="https://x.com/AlvaroSerero"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-umami-event="click-x"
+              className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400"
+            >
+              Alvaro Serero
+            </a>{" "}
+            while training for the Imperial Trail 70k, Fontainebleau —{" "}
+            <a
+              href="https://github.com/Alvaro5/trail-app"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-umami-event="click-github"
+              className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400"
+            >
+              open source on GitHub
+            </a>
+            .
+          </p>
+        </footer>
       </div>
     </main>
   );

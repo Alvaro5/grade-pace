@@ -9,7 +9,7 @@ export type TrackPoint = {
 
 // Distinct, catchable failure modes for the upload path. The UI maps `code`
 // to a friendly message; the engine stays free of any rendering concern.
-export type GpxErrorCode = "invalid" | "no-track" | "too-few";
+export type GpxErrorCode = "invalid" | "no-track" | "too-few" | "no-elevation";
 
 export class GpxError extends Error {
   readonly code: GpxErrorCode;
@@ -25,9 +25,13 @@ export function parseGpx(xml: string): TrackPoint[] {
   if (doc.querySelector("parsererror")) {
     throw new GpxError("invalid", "Not a valid GPX/XML file");
   }
-  const trkpts = doc.querySelectorAll("trkpt");
+  // Prefer recorded track points, but fall back to route points: race
+  // organizers publish courses as <rte>/<rtept>, and a route paces exactly
+  // like an untimed track (same lat/lon/ele shape, never a <time>).
+  let trkpts = doc.querySelectorAll("trkpt");
+  if (trkpts.length === 0) trkpts = doc.querySelectorAll("rtept");
   if (trkpts.length === 0) {
-    throw new GpxError("no-track", "GPX has no <trkpt> track points");
+    throw new GpxError("no-track", "GPX has no <trkpt> or <rtept> points");
   }
   const points = Array.from(trkpts).map((pt) => {
     // <time> is ISO 8601 (e.g. 2025-09-13T07:00:00Z). Date.parse → epoch ms,
@@ -42,6 +46,13 @@ export function parseGpx(xml: string): TrackPoint[] {
       ...(Number.isNaN(t) ? {} : { time: t }),
     };
   });
+
+  // No elevation anywhere → refuse rather than pace a silently flat course.
+  // Route exports often strip <ele>; grade-adjusting is the whole product, so
+  // an honest error ("re-export with elevation") beats a wrong flat plan.
+  if (points.every((p) => Number.isNaN(p.ele))) {
+    throw new GpxError("no-elevation", "GPX has no elevation data");
+  }
 
   // Forward-fill missing elevations (absent <ele> → NaN) so one gap can't
   // poison gradient → cost → time downstream.

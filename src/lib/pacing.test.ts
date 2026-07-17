@@ -195,17 +195,54 @@ describe("parseGpx failure modes (graceful upload path)", () => {
     }
   });
 
-  it("throws GpxError 'no-track' on a route/waypoint-only file (no <trkpt>)", () => {
-    // Valid XML, but a route export: <rtept>/<wpt> only, zero track points.
+  it("parses a route-only file (<rtept>) like an untimed track", () => {
+    // Race organizers publish courses as routes; they must pace like tracks.
     const route =
       `<gpx><rte><rtept lat="48.4" lon="2.6"><ele>100</ele></rtept>` +
       `<rtept lat="48.401" lon="2.6"><ele>110</ele></rtept></rte></gpx>`;
+    const points = parseGpx(route);
+    expect(points).toHaveLength(2);
+    expect(points[0].ele).toBe(100);
+    expect(points[1].ele).toBe(110);
+    expect(points[0].time).toBeUndefined();
+  });
+
+  it("prefers <trkpt> when a file carries both a track and a route", () => {
+    const both =
+      `<gpx><trk><trkseg><trkpt lat="48.4" lon="2.6"><ele>100</ele></trkpt>` +
+      `<trkpt lat="48.401" lon="2.6"><ele>120</ele></trkpt></trkseg></trk>` +
+      `<rte><rtept lat="10" lon="10"><ele>1</ele></rtept>` +
+      `<rtept lat="10.1" lon="10"><ele>2</ele></rtept></rte></gpx>`;
+    const points = parseGpx(both);
+    expect(points).toHaveLength(2);
+    expect(points[0].ele).toBe(100); // track's elevations, not the route's
+  });
+
+  it("throws GpxError 'no-track' on a waypoint-only file", () => {
+    const wptOnly =
+      `<gpx><wpt lat="48.4" lon="2.6"><ele>100</ele></wpt>` +
+      `<wpt lat="48.401" lon="2.6"><ele>110</ele></wpt></gpx>`;
     try {
-      parseGpx(route);
+      parseGpx(wptOnly);
       throw new Error("expected parseGpx to throw");
     } catch (e) {
       expect(e).toBeInstanceOf(GpxError);
       expect((e as GpxError).code).toBe("no-track");
+    }
+  });
+
+  it("throws GpxError 'no-elevation' when no point carries <ele>", () => {
+    // Common in route exports. A flat plan would be silently wrong — the whole
+    // product is grade adjustment — so this must be an explicit error.
+    const noEle =
+      `<gpx><rte><rtept lat="48.4" lon="2.6"/>` +
+      `<rtept lat="48.401" lon="2.6"/></rte></gpx>`;
+    try {
+      parseGpx(noEle);
+      throw new Error("expected parseGpx to throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(GpxError);
+      expect((e as GpxError).code).toBe("no-elevation");
     }
   });
 
