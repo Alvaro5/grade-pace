@@ -1,13 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+
+// Recharts is ~500 kB — by far the heaviest dependency — so the chart loads as
+// its own async chunk and never blocks first paint.
+const ElevationChart = lazy(() => import("./ElevationChart"));
 import {
   parseGpx,
   cumulativeDistances,
@@ -113,12 +108,25 @@ const fmtGrade = (g: number) => `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
 const gradeClass = (g: number) =>
   g > 0.005 ? "text-rose-400" : g < -0.005 ? "text-sky-400" : "text-zinc-400";
 
-// "6:00" -> 360 seconds; falls back to 6:00 if unparseable
+// "6:30" → 390 s, bare "6" → 360 s. NaN when unparseable — no silent fallback:
+// the caller keeps the last valid pace and shows an invalid state, so a typo
+// can't quietly reset the whole plan to 6:00/km.
 function parsePace(text: string): number {
-  const [m, s] = text.split(":").map(Number);
-  const sec = (m || 0) * 60 + (s || 0);
-  return sec > 0 ? sec : 360;
+  const t = text.trim();
+  if (!/^\d{1,3}(:[0-5]?\d)?$/.test(t)) return NaN;
+  const [m, s] = t.split(":").map(Number);
+  const sec = m * 60 + (s || 0);
+  return sec > 0 ? sec : NaN;
 }
+
+// "Imperial_Trail-2025.gpx" → "Imperial Trail 2025". The filename prefills the
+// course name, which feeds the share image — underscores shouldn't leak there.
+const titleFromFilename = (name: string) =>
+  name
+    .replace(/\.gpx$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const inputClass =
   "w-28 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 tabular-nums focus:border-emerald-500 focus:outline-none";
@@ -212,6 +220,21 @@ function GpxUpload() {
   // finish range. Manually touching the terrain slider makes it a guess again.
   const [calibrated, setCalibrated] = useState(false);
 
+  // Pace text validates on every keystroke; while it's invalid (mid-edit or a
+  // typo) the plan keeps using the last valid pace instead of silently
+  // resetting, and the field shows an inline invalid state. The last valid
+  // value is state, updated in onChange — not a ref written during render.
+  const [lastValidPaceSec, setLastValidPaceSec] = useState(360);
+  const paceSec = parsePace(paceText);
+  const paceValid = !Number.isNaN(paceSec);
+  const effectivePaceSec = paceValid ? paceSec : lastValidPaceSec;
+
+  function handlePaceChange(text: string) {
+    setPaceText(text);
+    const sec = parsePace(text);
+    if (!Number.isNaN(sec)) setLastValidPaceSec(sec);
+  }
+
   // Fit the terrain factor against a recorded run: run the forward model (at
   // ×1.00) over THAT run's course with the current pace inputs, then divide the
   // run's actual MOVING time by the prediction. The fit deliberately uses the
@@ -240,7 +263,7 @@ function GpxUpload() {
           points,
           dists,
           grades,
-          parsePace(paceText),
+          effectivePaceSec,
           Math.max(1, vam),
           hikeAbovePct / 100,
         );
@@ -333,15 +356,30 @@ function GpxUpload() {
       });
   }
 
-  function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setTitle(file.name.replace(/\.gpx$/i, ""));
+  // Shared by the file input and drag-and-drop — one path for user uploads.
+  function loadUserFile(file: File) {
+    setTitle(titleFromFilename(file.name));
     loadGpx(
       file.text(),
       "Couldn't read this file. Please try a different GPX.",
       "upload",
     );
+  }
+
+  function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) loadUserFile(file);
+  }
+
+  function handleDrop(event: React.DragEvent) {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!/\.gpx$/i.test(file.name)) {
+      setError("That doesn't look like a .gpx file — drop a GPX export.");
+      return;
+    }
+    loadUserFile(file);
   }
 
   // Fetch the bundled course. The GPX is fetched (not import-bundled) so it
@@ -379,7 +417,7 @@ function GpxUpload() {
     ? computeSplits(
         track.distances,
         track.grades,
-        parsePace(paceText),
+        effectivePaceSec,
         Math.max(1, vam),
         hikeAbovePct / 100,
         terrainFactor,
@@ -449,7 +487,9 @@ function GpxUpload() {
   }
 
   return (
-    <>
+    // The whole section is a drop target: dragging a GPX anywhere onto the
+    // page content loads it, no need to aim for the file input.
+    <div onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="file"
@@ -470,8 +510,8 @@ function GpxUpload() {
         )}
       </div>
       <p className="mt-2 text-xs text-zinc-500">
-        Your GPX is parsed right here in your browser — it never leaves your
-        device.
+        Or drop a .gpx file anywhere on the page. It's parsed right here in
+        your browser — it never leaves your device.
       </p>
 
       {error && (
@@ -507,9 +547,16 @@ function GpxUpload() {
               >
                 <input
                   value={paceText}
-                  onChange={(e) => setPaceText(e.target.value)}
-                  className={inputClass}
+                  onChange={(e) => handlePaceChange(e.target.value)}
+                  aria-invalid={!paceValid}
+                  className={`${inputClass} ${paceValid ? "" : "border-rose-500 focus:border-rose-500"}`}
                 />
+                {!paceValid && (
+                  <span className="text-xs text-rose-400">
+                    Enter a pace like 6:30 — still using{" "}
+                    {fmtPace(effectivePaceSec)}/km.
+                  </span>
+                )}
               </Field>
             </div>
 
@@ -627,54 +674,11 @@ function GpxUpload() {
           </div>
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <ResponsiveContainer width="100%" height={160}>
-              <AreaChart
-                data={track.profile}
-                margin={{ top: 5, right: 5, bottom: 0, left: 0 }}
-              >
-                <defs>
-                  <linearGradient id="ele" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.5} />
-                    <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="#27272a" vertical={false} />
-                <XAxis
-                  dataKey="km"
-                  type="number"
-                  domain={[0, "dataMax"]}
-                  tickFormatter={(v: number) => v.toFixed(0)}
-                  stroke="#71717a"
-                  fontSize={12}
-                  tickLine={false}
-                />
-                <YAxis
-                  width={52}
-                  stroke="#71717a"
-                  fontSize={12}
-                  tickLine={false}
-                  tickFormatter={(v: number) => `${Math.round(v)}m`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "#18181b",
-                    border: "1px solid #3f3f46",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: "#a1a1aa" }}
-                  formatter={(v) => [`${Math.round(Number(v))} m`, "elevation"]}
-                  labelFormatter={(v) => `km ${Number(v).toFixed(1)}`}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="ele"
-                  stroke="#34d399"
-                  strokeWidth={2}
-                  fill="url(#ele)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {/* Fixed-height fallback so the layout doesn't jump when the
+                chart chunk arrives. */}
+            <Suspense fallback={<div className="h-40" />}>
+              <ElevationChart profile={track.profile} />
+            </Suspense>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -803,7 +807,7 @@ function GpxUpload() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

@@ -200,6 +200,26 @@
   Hand-moving the terrain slider clears the calibrated flag → band widens.
   Band constants exported from pacing.ts; tests lock both bands + narrowing.
 
+- **Polish batch (first-visitor hardening).**
+  - *Bundle split:* the Recharts chart moved to `src/ElevationChart.tsx`,
+    loaded via `React.lazy` — main bundle no longer carries ~500 kB of chart
+    library; the page paints before the chart chunk arrives (fixed-height
+    Suspense fallback, no layout jump).
+  - *Error boundary* (`src/ErrorBoundary.tsx`, wraps `<App/>` in main.tsx): a
+    render error now shows a styled reload screen instead of a white page.
+  - *Pace input honesty:* `parsePace` returns NaN on garbage instead of
+    silently falling back to 6:00; the plan keeps the last VALID pace, the
+    field turns red with "still using X/km". Calibration uses the same
+    last-valid pace.
+  - *Drag & drop:* dropping a .gpx anywhere on the page loads it (same code
+    path as the file input). Non-.gpx drops get a friendly error.
+  - *Share-title cleanup:* `Imperial_Trail-2025.gpx` → "Imperial Trail 2025"
+    when prefilling the course name (feeds the share image).
+  - *App smoke test* (`src/App.test.tsx`): renders the real `<App/>` in
+    happy-dom with fetch mocked — locks the auto-load → example badge →
+    dashboard wiring that unit tests couldn't see. Chart module stubbed
+    (happy-dom has no layout engine).
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay
