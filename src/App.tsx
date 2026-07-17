@@ -21,6 +21,8 @@ import {
   type Split,
 } from "./lib/pacing";
 import { fmtClock, fmtPace } from "./lib/format";
+// Aliased: `track` is taken by the parsed-GPX state variable in GpxUpload.
+import { track as trackEvent } from "./lib/analytics";
 import { buildShareCardSvg, type ShareCardData } from "./lib/shareCard";
 import { svgToPng } from "./lib/rasterize";
 
@@ -181,10 +183,18 @@ function GpxUpload() {
   // Run any GPX text through the pipeline and reflect the result (or a friendly
   // error) in state. Shared by file upload and the bundled example so both take
   // the exact same path. `genericMsg` is the fallback for non-GpxError failures.
-  function loadGpx(textPromise: Promise<string>, genericMsg: string) {
+  // `source` labels the analytics events so upload vs example stay separable.
+  function loadGpx(
+    textPromise: Promise<string>,
+    genericMsg: string,
+    source: "upload" | "example",
+  ) {
     setError(null);
     textPromise
-      .then((text) => setTrack(buildTrack(text)))
+      .then((text) => {
+        setTrack(buildTrack(text));
+        trackEvent(source === "upload" ? "upload-gpx" : "load-example");
+      })
       .catch((err) => {
         // Map known parse failures to friendly inline copy; anything else gets a
         // generic message so the upload never crashes the page.
@@ -192,6 +202,13 @@ function GpxUpload() {
         setError(
           err instanceof GpxError ? GPX_ERROR_MESSAGE[err.code] : genericMsg,
         );
+        // The error code tells us WHICH failure users actually hit in the wild
+        // (e.g. how many bring route-only GPX files) — that data decides whether
+        // rtept support is worth building.
+        trackEvent("gpx-error", {
+          source,
+          code: err instanceof GpxError ? err.code : "other",
+        });
         console.error(err);
       });
   }
@@ -203,6 +220,7 @@ function GpxUpload() {
     loadGpx(
       file.text(),
       "Couldn't read this file. Please try a different GPX.",
+      "upload",
     );
   }
 
@@ -219,6 +237,7 @@ function GpxUpload() {
         },
       ),
       "Couldn't load the example course. Please try again.",
+      "example",
     );
   }
 
@@ -269,7 +288,10 @@ function GpxUpload() {
         text: `My ${data.title} race plan — built with GradePace`,
       };
       if (navigator.canShare?.(shareData)) {
+        // Fires only if share() resolves — dismissing the sheet throws
+        // AbortError and skips this, so the count is real shares.
         await navigator.share(shareData);
+        trackEvent("share-image", { method: "native" });
       } else {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -277,6 +299,7 @@ function GpxUpload() {
         a.download = "gradepace-plan.png";
         a.click();
         URL.revokeObjectURL(url);
+        trackEvent("share-image", { method: "download" });
       }
     } catch (err) {
       // The user dismissing the native share sheet is not an error.

@@ -36,6 +36,17 @@
       content="Grade-adjusted race plans from your GPX — per-km pace, climbs, and power-hike splits. All in your browser."
     />
     <meta name="twitter:image" content="https://gradepace.vercel.app/og.png" />
+
+    <!-- Umami analytics (cookieless, ~2 kB). data-domains restricts tracking to
+         production, so localhost/dev sessions never pollute the stats — the
+         tracker script sees a non-matching domain and disables itself, and the
+         track() wrapper in src/lib/analytics.ts no-ops. -->
+    <script
+      defer
+      src="https://cloud.umami.is/script.js"
+      data-website-id="661590e1-71ee-4d82-b78e-de2f8cc208a1"
+      data-domains="gradepace.vercel.app"
+    ></script>
   </head>
   <body>
     <div id="root"></div>

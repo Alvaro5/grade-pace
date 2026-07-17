@@ -122,6 +122,17 @@
   - Tests: window-3 equality, line-preserving interior, and threshold deadband
     (noise→0, real climb banked, valley re-anchoring, threshold-0 == naive).
 
+- **Analytics — Umami Cloud (free tier, custom events included).** Script tag in
+  `index.html` with `data-domains="gradepace.vercel.app"` so dev/localhost never
+  records; `src/lib/analytics.ts` is a no-op-safe `track()` wrapper (undefined
+  tracker / ad-blocker / dev all silently skip). Four events: `load-example`,
+  `upload-gpx`, `gpx-error` (with source + error code — measures how many
+  visitors bring route-only GPX files, which decides whether rtept support is
+  worth building), `share-image` (with native-sheet vs download method; only
+  counted after a completed share, not a dismissed sheet). Chosen over Vercel
+  Analytics because the Hobby plan is pageviews-only (custom events are Pro).
+  Site created at cloud.umami.is; the live website ID is in `index.html`.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay
