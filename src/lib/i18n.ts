@@ -117,6 +117,8 @@ const en = {
   themeToDark: "Switch to dark mode",
   uploadCourse: "Upload GPX",
   calibAdd: "Add recorded runs",
+  aidLabel: "Aid stations",
+  aidPlaceholder: "e.g. 17, 33, 47",
 };
 
 export type Messages = typeof en;
@@ -225,6 +227,8 @@ const fr: Messages = {
   themeToDark: "Passer en mode sombre",
   uploadCourse: "Importer un GPX",
   calibAdd: "Ajouter des sorties",
+  aidLabel: "Ravitaillements",
+  aidPlaceholder: "ex. 17, 33, 47",
 };
 
 export const MESSAGES: Record<Lang, Messages> = { en, fr };

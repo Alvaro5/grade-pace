@@ -2,6 +2,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -22,6 +23,7 @@ export default function ElevationChart({
   labels = { elevation: "elevation", powerHike: "power-hike" },
   theme = "dark",
   paceLabelAt,
+  aidKms,
 }: {
   profile: { km: number; ele: number }[];
   units?: "metric" | "imperial";
@@ -38,6 +40,8 @@ export default function ElevationChart({
   // Plan pace for the split containing a metric km — shown in the tooltip so
   // hovering answers "what will I be doing here".
   paceLabelAt?: (kmMetric: number) => string | null;
+  // Aid-station positions in metric km — dashed markers labeled R1, R2, …
+  aidKms?: number[];
 }) {
   const dark = theme === "dark";
   const imperial = units === "imperial";
@@ -178,6 +182,21 @@ export default function ElevationChart({
         {/* No path animation: with ~7k resampled points it fights custom
             domains/baselines in Recharts, and it re-played on every input
             keystroke anyway. The page-level fade covers the entrance. */}
+        {/* Aid-station markers, above the area so they read on the fill. */}
+        {aidKms?.map((k, i) => (
+          <ReferenceLine
+            key={k}
+            x={imperial ? k / 1.609344 : k}
+            stroke={dark ? "#a1a1aa" : "#71717a"}
+            strokeDasharray="4 4"
+            label={{
+              value: `R${i + 1}`,
+              position: "insideTop",
+              fill: dark ? "#d4d4d8" : "#52525b",
+              fontSize: 11,
+            }}
+          />
+        ))}
         <Area
           type="monotone"
           dataKey="ele"

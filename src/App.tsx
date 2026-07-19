@@ -199,6 +199,7 @@ type HashPlan = {
   gate?: number;
   tf?: number;
   units?: Units;
+  rav?: number[]; // aid-station positions, metric km (canonical in the hash)
 };
 
 function readPlanFromHash(): HashPlan {
@@ -215,6 +216,15 @@ function readPlanFromHash(): HashPlan {
     if (tf >= 0.8 && tf <= 1.6) plan.tf = tf;
     const u = p.get("u");
     if (u === "metric" || u === "imperial") plan.units = u;
+    const rav = p.get("rav");
+    if (rav) {
+      const kms = rav
+        .split(",")
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0 && n < 1000)
+        .slice(0, 30);
+      if (kms.length) plan.rav = kms;
+    }
     return plan;
   } catch {
     return {}; // malformed hash → plain defaults, never a crash
@@ -359,6 +369,22 @@ function GpxUpload({
   const [chartZoom, setChartZoom] = useState(false);
   // Effort sliders: always visible on desktop (lg), toggled below that.
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Aid stations ("ravitaillements") as free text in the ACTIVE unit —
+  // "17, 33, 47". Parsed leniently every render; the hash stores metric km.
+  const [aidText, setAidText] = useState(() => {
+    if (!hashPlan.rav?.length) return "";
+    const vals =
+      (hashPlan.units ?? initialUnits()) === "imperial"
+        ? hashPlan.rav.map((k) => +(k / KM_PER_MI).toFixed(1))
+        : hashPlan.rav.map((k) => +k.toFixed(1));
+    return vals.join(", ");
+  });
+
+  const parseAidText = (text: string) =>
+    text
+      .split(/[,;\s]+/)
+      .map(Number)
+      .filter((n) => Number.isFinite(n) && n > 0);
 
   useEffect(() => {
     if (!chartZoom) return;
@@ -379,6 +405,13 @@ function GpxUpload({
       tf: terrainFactor.toFixed(2),
       u: units,
     });
+    // Stations travel with the plan, canonically in metric km.
+    const aidNums = parseAidText(aidText);
+    if (aidNums.length) {
+      const kms =
+        units === "imperial" ? aidNums.map((v) => v * KM_PER_MI) : aidNums;
+      params.set("rav", kms.map((k) => +k.toFixed(1)).join(","));
+    }
     const url = `${window.location.origin}${window.location.pathname}#${params.toString()}`;
     try {
       await navigator.clipboard.writeText(url);
@@ -441,6 +474,15 @@ function GpxUpload({
     );
     setPaceText(fmtPace(converted));
     setLastValidPaceSec(converted);
+    // Aid-station positions follow too (they're typed in the active unit).
+    const aidNums = parseAidText(aidText);
+    if (aidNums.length) {
+      const conv =
+        next === "imperial"
+          ? aidNums.map((v) => v / KM_PER_MI)
+          : aidNums.map((v) => v * KM_PER_MI);
+      setAidText(conv.map((v) => +v.toFixed(1)).join(", "));
+    }
     trackEvent("switch-units", { to: next });
   }
 
@@ -707,6 +749,43 @@ function GpxUpload({
     );
     return paceStr(splits[idx].paceSecPerKm);
   };
+
+  // Aid stations with projected arrival: elapsed time interpolated inside
+  // the split containing each station — the plan already knows WHEN you'll
+  // reach a ravitaillement, not just where it is.
+  const elapsedAtKm = (km: number): number | null => {
+    let prevEnd = 0;
+    let prevElapsed = 0;
+    for (const s of splits) {
+      const end = prevEnd + s.distanceKm;
+      if (km <= end) return prevElapsed + (km - prevEnd) * s.paceSecPerKm;
+      prevEnd = end;
+      prevElapsed = s.elapsedSec;
+    }
+    return null;
+  };
+  const aidKms = (() => {
+    const raw = parseAidText(aidText);
+    const kms = units === "imperial" ? raw.map((v) => v * KM_PER_MI) : raw;
+    const total = track?.distanceKm ?? 0;
+    return [...new Set(kms.map((k) => +k.toFixed(2)))]
+      .filter((k) => k > 0 && k < total)
+      .sort((a, b) => a - b)
+      .slice(0, 30);
+  })();
+  const aidStops = aidKms
+    .map((km) => ({ km, eta: elapsedAtKm(km) }))
+    .filter((s): s is { km: number; eta: number } => s.eta !== null);
+  // Which 1-based table bucket holds each station, for the row badges.
+  const aidByBucket = new Map<number, number[]>();
+  aidKms.forEach((km, i) => {
+    if (!splits.length) return;
+    const idx =
+      Math.min(Math.floor((km * 1000) / bucketMeters), splits.length - 1) + 1;
+    const list = aidByBucket.get(idx) ?? [];
+    list.push(i + 1);
+    aidByBucket.set(idx, list);
+  });
 
   // Render the current plan to a branded PNG and share it (native share sheet
   // when available, e.g. mobile) or download it. Every shared card carries the
@@ -1101,6 +1180,7 @@ function GpxUpload({
                 labels={chartLabels}
                 theme={theme}
                 paceLabelAt={paceLabelAt}
+                aidKms={aidKms}
               />
             </Suspense>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -1115,6 +1195,36 @@ function GpxUpload({
                 <ExpandIcon className="h-3.5 w-3.5" />
                 {t.expandChart}
               </button>
+            </div>
+            {/* Ravitaillements: positions typed in the active unit; each chip
+                shows the PROJECTED arrival — the plan's real added value over
+                the roadbook's km marks. */}
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-zinc-800 pt-3 light:border-zinc-200">
+              <label className="flex items-center gap-2 text-xs text-zinc-400 light:text-zinc-500">
+                <span className="uppercase tracking-wider">{t.aidLabel}</span>
+                <input
+                  value={aidText}
+                  onChange={(e) => setAidText(e.target.value)}
+                  placeholder={t.aidPlaceholder}
+                  aria-label={t.aidLabel}
+                  className="w-36 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-zinc-100 transition-colors focus:border-emerald-500 focus:outline-none light:border-zinc-300 light:bg-white light:text-zinc-900"
+                />
+                <span>{units === "imperial" ? "mi" : "km"}</span>
+              </label>
+              {aidStops.map((s, i) => (
+                <span
+                  key={s.km}
+                  className="rounded-md border border-zinc-700 bg-zinc-800/60 px-2 py-1 text-xs tabular-nums text-zinc-300 light:border-zinc-300 light:bg-zinc-100 light:text-zinc-700"
+                >
+                  <span className="font-semibold text-emerald-400 light:text-emerald-600">
+                    R{i + 1}
+                  </span>{" "}
+                  {units === "imperial"
+                    ? `${(s.km / KM_PER_MI).toFixed(1)} mi`
+                    : `${s.km.toFixed(1)} km`}{" "}
+                  · ≈ {fmtClockShort(s.eta)}
+                </span>
+              ))}
             </div>
           </div>
 
@@ -1159,6 +1269,7 @@ function GpxUpload({
                   labels={chartLabels}
                   theme={theme}
                   paceLabelAt={paceLabelAt}
+                  aidKms={aidKms}
                 />
               </div>
               <div onClick={(e) => e.stopPropagation()}>{chartLegend}</div>
@@ -1287,6 +1398,15 @@ function GpxUpload({
                       {s.distanceKm < bucketKm * 0.95
                         ? ` (${(units === "imperial" ? s.distanceKm / KM_PER_MI : s.distanceKm).toFixed(2)})`
                         : ""}
+                      {aidByBucket.get(s.km)?.map((n) => (
+                        <span
+                          key={n}
+                          title={`${t.aidLabel} R${n}`}
+                          className="ml-1.5 rounded bg-emerald-500/15 px-1 text-[10px] font-semibold text-emerald-400 light:text-emerald-600"
+                        >
+                          R{n}
+                        </span>
+                      ))}
                     </td>
                     <td
                       className={`py-1.5 pr-4 text-right ${gradeClass(s.grade)}`}

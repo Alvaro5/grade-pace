@@ -68,7 +68,7 @@ describe("App smoke test", () => {
   });
 
   it("restores a shared plan from the URL hash", async () => {
-    window.location.hash = "#p=5:00&vam=900&gate=25&tf=1.10&u=metric";
+    window.location.hash = "#p=5:00&vam=900&gate=25&tf=1.10&u=metric&rav=5,12";
     try {
       const container = document.createElement("div");
       document.body.appendChild(container);
@@ -85,6 +85,11 @@ describe("App smoke test", () => {
       const paceInput =
         container.querySelector<HTMLInputElement>("input[aria-invalid]");
       expect(paceInput?.value).toBe("5:00");
+      // Aid stations travel with the link too (metric canonical in the hash).
+      const aidInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Aid stations"]',
+      );
+      expect(aidInput?.value).toBe("5, 12");
     } finally {
       window.location.hash = "";
     }

@@ -398,6 +398,15 @@
     hovering now answers "what will I be doing here", making the chart the
     actual planning surface. Verified: "317 ft · +2% · 10:27/mi".
 
+- **Aid stations ("ravitaillements") with projected arrival times.** Free-text
+  positions in the active unit ("17, 33, 47", lenient parsing, capped at 30,
+  clipped to course length). Rendered as: dashed R1/R2/… ReferenceLines on
+  both chart views; chips under the chart showing each station's PROJECTED
+  arrival (elapsed time interpolated inside the containing split — the value
+  the roadbook can't give); green R-badges on the matching splits-table rows.
+  Positions convert on the units toggle like the pace field, and travel in
+  shared plan links (`rav` hash param, metric-canonical; smoke-tested).
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay
