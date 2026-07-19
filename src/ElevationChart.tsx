@@ -8,21 +8,11 @@ import {
   YAxis,
 } from "recharts";
 
+import { gradeColor } from "./lib/gradeColor";
+
 // Split out of App.tsx solely so Recharts (~500 kB of the bundle, by far the
 // heaviest dependency) loads as its own async chunk via React.lazy — the page
 // paints and is interactive before the chart library arrives.
-
-// Color scale for the stroke, by grade. Thresholds echo the product language:
-// green = runnable, amber shades = climbing, rose = power-hike territory
-// (near the default 18% gate), blues = descent.
-function gradeColor(g: number): string {
-  if (g > 0.15) return "#f43f5e"; // rose-500 — hike-steep
-  if (g > 0.08) return "#fb923c"; // orange-400 — hard climb
-  if (g > 0.03) return "#fbbf24"; // amber-400 — climb
-  if (g < -0.08) return "#38bdf8"; // sky-400 — steep descent
-  if (g < -0.03) return "#7dd3fc"; // sky-300 — descent
-  return "#34d399"; // emerald-400 — flat / runnable
-}
 
 export default function ElevationChart({
   profile,

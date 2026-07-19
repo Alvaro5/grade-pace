@@ -7,6 +7,7 @@
 // (see src/lib/rasterize.ts). The visual language mirrors public/og.svg.
 
 import { fmtClock, fmtClockShort, fmtPace } from "./format";
+import { gradeColor } from "./gradeColor";
 
 export type ShareCardData = {
   title: string;
@@ -61,16 +62,23 @@ function sample<T>(arr: T[], n: number): T[] {
   return out;
 }
 
-// Two SVG paths for the elevation motif: a stroked line and a filled area.
-// Degenerate profiles (0 or 1 point, flat elevation) collapse to a midline.
+// Two SVG paths for the elevation motif: a stroked line and a filled area,
+// plus grade-colored gradient stops for the stroke (same scale as the on-page
+// chart via gradeColor). Degenerate profiles (0 or 1 point, flat elevation)
+// collapse to a midline with no stops — callers fall back to a solid stroke.
 function profilePaths(profile: { km: number; ele: number }[]): {
   line: string;
   area: string;
+  stops: { off: number; color: string }[];
 } {
   const yMid = (PY_TOP + PY_BOTTOM) / 2;
   if (profile.length < 2) {
     const line = `M${PX0} ${yMid} L${PX1} ${yMid}`;
-    return { line, area: `${line} L${PX1} ${PY_BOTTOM} L${PX0} ${PY_BOTTOM} Z` };
+    return {
+      line,
+      area: `${line} L${PX1} ${PY_BOTTOM} L${PX0} ${PY_BOTTOM} Z`,
+      stops: [],
+    };
   }
   const pts = sample(profile, 90);
   const kmMin = pts[0].km;
@@ -89,11 +97,32 @@ function profilePaths(profile: { km: number; ele: number }[]): {
   });
   const line = `M${xy.join(" L")}`;
   const area = `${line} L${PX1.toFixed(1)} ${PY_BOTTOM} L${PX0.toFixed(1)} ${PY_BOTTOM} Z`;
-  return { line, area };
+  // Grade between adjacent sampled points (~1/90th of the course apart) —
+  // coarse but plenty for a 1040 px-wide color band.
+  const stops = pts.map((p, i) => {
+    const b = Math.min(pts.length - 1, i + 1);
+    const a = b === i ? i - 1 : i;
+    const dKm = pts[b].km - pts[a].km;
+    const g = dKm > 0 ? (pts[b].ele - pts[a].ele) / (dKm * 1000) : 0;
+    return { off: (p.km - kmMin) / kmSpan, color: gradeColor(g) };
+  });
+  return { line, area, stops };
 }
 
 export function buildShareCardSvg(d: ShareCardData): string {
-  const { line, area } = profilePaths(d.profile);
+  const { line, area, stops } = profilePaths(d.profile);
+  // Degenerate profiles have no stops — a gradient with none renders an
+  // invisible stroke, so fall back to solid emerald.
+  const strokePaint = stops.length >= 2 ? "url(#gline)" : "#34d399";
+  const gradeGradient =
+    stops.length >= 2
+      ? `\n    <linearGradient id="gline" x1="0" y1="0" x2="1" y2="0">\n${stops
+          .map(
+            (s) =>
+              `      <stop offset="${(s.off * 100).toFixed(2)}%" stop-color="${s.color}"/>`,
+          )
+          .join("\n")}\n    </linearGradient>`
+      : "";
   const title = esc(truncate(d.title.trim() || "Race plan", 28));
   const finish = fmtClock(d.timeSec);
   const imperial = d.units === "imperial";
@@ -122,7 +151,7 @@ export function buildShareCardSvg(d: ShareCardData): string {
     <linearGradient id="ele" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#34d399" stop-opacity="0.45"/>
       <stop offset="100%" stop-color="#34d399" stop-opacity="0"/>
-    </linearGradient>
+    </linearGradient>${gradeGradient}
   </defs>
 
   <rect width="${W}" height="${H}" fill="url(#bg)"/>
@@ -153,7 +182,7 @@ ${stat(860, "POWER-HIKE", hike)}
 
   <!-- elevation profile -->
   <path d="${area}" fill="url(#ele)"/>
-  <path d="${line}" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="${line}" fill="none" stroke="${strokePaint}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
   <!-- watermark -->
   <text x="1120" y="600" text-anchor="end" font-family="${FONT}" font-size="22" font-weight="500" fill="#52525b">${site}</text>

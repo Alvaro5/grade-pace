@@ -260,6 +260,15 @@
   rose = hike-steep (≈ the 18% gate). Tooltip now shows elevation · grade.
   Area fill stays the subtle emerald fade.
 
+- **Share card: grade-colored profile + preview harness.** The card's profile
+  stroke now uses the same grade→color scale as the on-page chart, via a new
+  shared `src/lib/gradeColor.ts` (single source, the two can't drift).
+  Degenerate profiles fall back to solid emerald (a stop-less gradient would
+  render an invisible line — guarded + tested). Verified visually with
+  `scripts/render-card-preview.mjs` (npx tsx; renders the card to PNG via
+  sharp without a browser — kept as a dev harness). Also: aria-labels on both
+  file inputs.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

@@ -565,6 +565,7 @@ function GpxUpload() {
           type="file"
           accept=".gpx"
           onChange={handleFile}
+          aria-label="Upload a course GPX file"
           className="block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-emerald-500"
         />
         {/* Pointless while the example is already on screen; reappears after a
@@ -718,6 +719,7 @@ function GpxUpload() {
               type="file"
               accept=".gpx"
               onChange={handleCalibFile}
+              aria-label="Upload a recorded run GPX for calibration"
               className="mt-3 block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-600 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-zinc-200 hover:file:border-emerald-500"
             />
             {calibError && (

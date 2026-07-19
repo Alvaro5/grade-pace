@@ -29,6 +29,19 @@ describe("buildShareCardSvg", () => {
     expect(svg).toContain("trail-app-two.vercel.app");
   });
 
+  it("colors the profile stroke by grade, with a solid fallback when degenerate", () => {
+    // Real profile → grade gradient referenced by the line stroke.
+    const svg = buildShareCardSvg(base);
+    expect(svg).toContain('id="gline"');
+    expect(svg).toContain('stroke="url(#gline)"');
+    // 100→150 over 1 km = +5% → climb color must appear among the stops.
+    expect(svg).toContain("#fbbf24");
+    // Single-point profile → no stops; solid emerald stroke, no invisible line.
+    const flat = buildShareCardSvg({ ...base, profile: [{ km: 0, ele: 100 }] });
+    expect(flat).not.toContain('id="gline"');
+    expect(flat).toContain('stroke="#34d399"');
+  });
+
   it("converts the stat strip to imperial units when asked", () => {
     const svg = buildShareCardSvg({ ...base, units: "imperial" });
     expect(svg).toContain("15.8 mi"); // 25.4 km
