@@ -613,6 +613,25 @@
     R2 ≈ 3:39 (3:36 moving + R1 dwell), R3 rose at 5:18 vs 5:00, clocks
     hand-checked. 105 tests total.
 
+- **Persistence + PWA (roadmap batch 3).**
+  - *Plan persistence* (`src/lib/persistence.ts`, +5 tests): the last
+    UPLOADED course (raw GPX text, the source of truth) and every plan
+    setting live in one versioned localStorage entry, auto-saved (debounced
+    500 ms) and restored on the next visit with a quiet "Saved" badge + a
+    Forget action. Precedence hash > saved > defaults: shared links always
+    show the sender's plan. The calibrated flag survives a restore (the
+    measurement stands) but still never travels in a link. Examples never
+    overwrite a saved plan; a corrupt save falls back to the example and
+    self-clears. Storage failures (quota, private browsing) degrade to
+    no-persistence, never a crash.
+  - *PWA* (`vite-plugin-pwa`, autoUpdate): installable, app shell precached
+    (18 entries ≈ 890 KiB), so a saved plan opens offline — the race-day
+    case. Deliberately NO runtime caching: map tiles and Overpass stay
+    live-only (usage policies; stale POIs are worse than none), and the
+    bundled example GPX files aren't precached (offline serves YOUR plan,
+    not the demo). Icons generated from the brand favicon (192/512 + a
+    full-bleed maskable) via gen-og.mjs.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

@@ -83,6 +83,7 @@ src/
                        to each projected segment between aid stations.
   lib/logistics.ts     Race logistics: aid-station dwell time, wall-clock
                        ETAs from a start time, cutoff-barrier warnings.
+  lib/persistence.ts   Local save/restore of the last uploaded plan.
   lib/planSheet.ts     Printable race-day plan sheet (stats, profile, aid ETAs,
                        nutrition, full pacing table) for the PDF export.
   App.tsx              UI: upload, effort inputs, calibration, share, table.
