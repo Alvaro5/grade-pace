@@ -127,7 +127,11 @@ function buildTrack(text: string): Track {
 const fmtGrade = (g: number) => `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
 
 const gradeClass = (g: number) =>
-  g > 0.005 ? "text-rose-400" : g < -0.005 ? "text-sky-400" : "text-zinc-400";
+  g > 0.005
+    ? "text-rose-400 light:text-rose-600"
+    : g < -0.005
+      ? "text-sky-400 light:text-sky-600"
+      : "text-zinc-400 light:text-zinc-500";
 
 // "6:30" → 390 s, bare "6" → 360 s. NaN when unparseable — no silent fallback:
 // the caller keeps the last valid pace and shows an invalid state, so a typo
@@ -155,6 +159,21 @@ type Units = "metric" | "imperial";
 const KM_PER_MI = 1.609344;
 const FT_PER_M = 3.28084;
 const MILE_M = 1609.344;
+
+// Dark is the brand default; light is opt-in (class on <html>, see index.css).
+type Theme = "dark" | "light";
+
+function initialTheme(): Theme {
+  try {
+    const saved = localStorage.getItem("gp-theme");
+    if (saved === "dark" || saved === "light") return saved;
+  } catch {
+    /* fall through to the system preference */
+  }
+  return window.matchMedia?.("(prefers-color-scheme: light)")?.matches
+    ? "light"
+    : "dark";
+}
 
 // Plan settings encoded in the URL hash (#p=6:00&vam=750&gate=18&tf=1.08&u=metric)
 // so a plan can travel as a LINK, not just a PNG. Only the effort inputs are
@@ -202,13 +221,21 @@ function initialUnits(): Units {
   return navigator.language === "en-US" ? "imperial" : "metric";
 }
 
+// Shared class fragments — each carries its dark default + light override so
+// the two themes can't drift apart per-instance.
+const cardClass =
+  "rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 light:border-zinc-200 light:bg-white";
 const inputClass =
-  "w-28 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 tabular-nums focus:border-emerald-500 focus:outline-none";
+  "w-28 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 tabular-nums focus:border-emerald-500 focus:outline-none light:border-zinc-300 light:bg-white light:text-zinc-900";
+const btnSecondaryClass =
+  "rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white light:border-zinc-300 light:bg-white light:text-zinc-700 light:hover:text-emerald-700";
+const alertClass =
+  "rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200 light:text-amber-800";
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-      <div className="text-xs uppercase tracking-wider text-zinc-400">
+    <div className={cardClass}>
+      <div className="text-xs uppercase tracking-wider text-zinc-400 light:text-zinc-500">
         {label}
       </div>
       <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
@@ -227,7 +254,7 @@ function Field({
 }) {
   return (
     <label className="flex w-56 flex-col gap-1 text-sm">
-      <span className="text-zinc-300">{label}</span>
+      <span className="text-zinc-300 light:text-zinc-700">{label}</span>
       {children}
       {hint && <span className="text-xs text-zinc-500">{hint}</span>}
     </label>
@@ -255,9 +282,11 @@ function SliderField({
 }) {
   return (
     <label className="flex w-56 flex-col gap-1 text-sm">
-      <span className="flex justify-between text-zinc-300">
+      <span className="flex justify-between text-zinc-300 light:text-zinc-700">
         <span>{label}</span>
-        <span className="tabular-nums text-zinc-200">{display}</span>
+        <span className="tabular-nums text-zinc-200 light:text-zinc-800">
+          {display}
+        </span>
       </span>
       <input
         type="range"
@@ -273,7 +302,15 @@ function SliderField({
   );
 }
 
-function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
+function GpxUpload({
+  t,
+  lang,
+  theme,
+}: {
+  t: Messages;
+  lang: Lang;
+  theme: Theme;
+}) {
   const [track, setTrack] = useState<Track | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A shared-plan link overrides the defaults for every effort input below.
@@ -638,7 +675,8 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
 
   // Render the current plan to a branded PNG and share it (native share sheet
   // when available, e.g. mobile) or download it. Every shared card carries the
-  // GradePace mark + site URL — the growth loop.
+  // GradePace mark + site URL — the growth loop. The card itself is always
+  // dark: a single brand surface, whatever the viewer's theme.
   async function handleShare() {
     if (!track || !splits.length) return;
     setSharing(true);
@@ -724,7 +762,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
           accept=".gpx"
           onChange={handleFile}
           aria-label={t.uploadCourseAria}
-          className="block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-emerald-500"
+          className="block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-emerald-500 light:text-zinc-500"
         />
         {/* Example switcher: offer whichever bundled course isn't on screen.
             Imperial is the owner's race; 25 Bosses is the steep showcase. */}
@@ -735,7 +773,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
               key={key}
               type="button"
               onClick={() => loadExample(key)}
-              className="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white"
+              className={btnSecondaryClass}
             >
               {key === "imperial" ? t.loadImperial : t.loadBosses}
             </button>
@@ -744,10 +782,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
       <p className="mt-2 text-xs text-zinc-500">{t.dropHint}</p>
 
       {error && (
-        <div
-          role="alert"
-          className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
-        >
+        <div role="alert" className={`mt-4 ${alertClass}`}>
           {error}
         </div>
       )}
@@ -756,26 +791,26 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
         <div className="mt-8 space-y-6">
           {exampleShown && (
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-300 light:text-emerald-700">
                 {t.exampleBadge}
               </span>
-              <span className="text-zinc-400">
+              <span className="text-zinc-400 light:text-zinc-600">
                 {exampleShown === "imperial"
                   ? t.exampleImperial
                   : t.exampleBosses}
               </span>
             </div>
           )}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <div className={cardClass}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 light:text-zinc-500">
                 {t.yourPace}
               </h2>
               {/* Units: labeled + aria-pressed so the switch reads as a
                   setting, not two mystery chips. */}
-              <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <div className="flex items-center gap-2 text-xs text-zinc-400 light:text-zinc-500">
                 <span className="uppercase tracking-wider">{t.unitsLabel}</span>
-                <div className="flex overflow-hidden rounded-md border border-zinc-700">
+                <div className="flex overflow-hidden rounded-md border border-zinc-700 light:border-zinc-300">
                   {(["metric", "imperial"] as const).map((u) => (
                     <button
                       key={u}
@@ -785,7 +820,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                       className={`px-3 py-1.5 text-sm font-medium ${
                         units === u
                           ? "bg-emerald-600 text-white"
-                          : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                          : "bg-zinc-800 text-zinc-400 hover:text-zinc-200 light:bg-white light:text-zinc-500 light:hover:text-zinc-800"
                       }`}
                     >
                       {u === "metric" ? "km" : "mi"}
@@ -808,7 +843,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                   className={`${inputClass} ${paceValid ? "" : "border-rose-500 focus:border-rose-500"}`}
                 />
                 {!paceValid && (
-                  <span className="text-xs text-rose-400">
+                  <span className="text-xs text-rose-400 light:text-rose-600">
                     {t.paceInvalid(
                       units === "imperial" ? "9:40" : "6:30",
                       `${fmtPace(effectivePaceSec)}/${units === "imperial" ? "mi" : "km"}`,
@@ -820,8 +855,8 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
 
             {/* Jargon controls tucked away — the default view needs none of them.
                 Native <details> keeps it collapsed on load with no extra state. */}
-            <details className="mt-4 border-t border-zinc-800 pt-3">
-              <summary className="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">
+            <details className="mt-4 border-t border-zinc-800 pt-3 light:border-zinc-200">
+              <summary className="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200 light:text-zinc-600 light:hover:text-zinc-900">
                 {t.advanced}
               </summary>
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-4">
@@ -872,8 +907,8 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
               instead of guessing the slider. Collapsed by default — it's a
               power feature and the expanded paragraph was landing-page
               clutter for first-time visitors. */}
-          <details className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200">
+          <details className={cardClass}>
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200 light:text-zinc-500 light:hover:text-zinc-800">
               {t.calibTitle}
               <span className="ml-2 font-normal normal-case tracking-normal text-zinc-500">
                 {calibrated
@@ -881,20 +916,19 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                   : t.calibMeasure}
               </span>
             </summary>
-            <p className="mt-3 text-sm text-zinc-400">{t.calibIntro}</p>
+            <p className="mt-3 text-sm text-zinc-400 light:text-zinc-600">
+              {t.calibIntro}
+            </p>
             <input
               type="file"
               accept=".gpx"
               multiple
               onChange={handleCalibFiles}
               aria-label={t.calibUploadAria}
-              className="mt-3 block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-600 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-zinc-200 hover:file:border-emerald-500"
+              className="mt-3 block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-600 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-zinc-200 hover:file:border-emerald-500 light:text-zinc-500 light:file:border-zinc-300 light:file:bg-white light:file:text-zinc-700"
             />
             {calibError && (
-              <div
-                role="alert"
-                className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
-              >
+              <div role="alert" className={`mt-3 ${alertClass}`}>
                 {calibError}
               </div>
             )}
@@ -903,9 +937,9 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                 {calibFits.map(({ run, factor, plausible }) => (
                   <div
                     key={run.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-300"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-300 light:border-zinc-300 light:bg-zinc-100 light:text-zinc-700"
                   >
-                    <span className="font-medium text-zinc-100">
+                    <span className="font-medium text-zinc-100 light:text-zinc-900">
                       {run.fileName}
                     </span>
                     {run.dateMs !== null && (
@@ -922,7 +956,9 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                     </span>
                     <span
                       className={`ml-auto font-semibold tabular-nums ${
-                        plausible ? "text-emerald-400" : "text-amber-300"
+                        plausible
+                          ? "text-emerald-400 light:text-emerald-600"
+                          : "text-amber-300 light:text-amber-700"
                       }`}
                     >
                       {factor !== null ? `×${factor.toFixed(2)}` : "—"}
@@ -935,7 +971,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                         )
                       }
                       aria-label={t.removeRun(run.fileName)}
-                      className="text-zinc-500 hover:text-zinc-200"
+                      className="text-zinc-500 hover:text-zinc-200 light:hover:text-zinc-800"
                     >
                       ✕
                     </button>
@@ -944,7 +980,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                         a badly wrong flat pace) — keep it visible, exclude it
                         from the median. */}
                     {!plausible && (
-                      <span className="w-full text-xs text-amber-300">
+                      <span className="w-full text-xs text-amber-300 light:text-amber-700">
                         {t.implausible}
                       </span>
                     )}
@@ -976,7 +1012,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
             )}
           </details>
 
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <div className={cardClass}>
             {/* Fixed-height fallback so the layout doesn't jump when the
                 chart chunk arrives. */}
             <Suspense fallback={<div className="h-72" />}>
@@ -986,6 +1022,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                 hikeAboveGrade={hikeAbovePct / 100}
                 height={288}
                 labels={chartLabels}
+                theme={theme}
               />
             </Suspense>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -995,17 +1032,19 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
               <button
                 type="button"
                 onClick={() => setChartZoom(true)}
-                className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:border-emerald-500 hover:text-white"
+                className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:border-emerald-500 hover:text-white light:border-zinc-300 light:bg-white light:text-zinc-600 light:hover:text-emerald-700"
               >
                 ⤢ {t.expandChart}
               </button>
             </div>
           </div>
 
-          {/* Fullscreen course-study view. Backdrop click or Escape closes. */}
+          {/* Fullscreen course-study view. Backdrop click or Escape closes.
+              Fully opaque — a translucent backdrop reads as ghosting on big
+              bright displays. */}
           {chartZoom && (
             <div
-              className="fixed inset-0 z-50 flex flex-col gap-3 bg-zinc-950 p-4 sm:p-8"
+              className="fixed inset-0 z-50 flex flex-col gap-3 bg-zinc-950 p-4 light:bg-zinc-50 sm:p-8"
               onClick={() => setChartZoom(false)}
             >
               <div
@@ -1018,7 +1057,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                 <button
                   type="button"
                   onClick={() => setChartZoom(false)}
-                  className="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white"
+                  className={btnSecondaryClass}
                 >
                   ✕ {t.closeChart}
                 </button>
@@ -1033,6 +1072,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                   hikeAboveGrade={hikeAbovePct / 100}
                   height="100%"
                   labels={chartLabels}
+                  theme={theme}
                 />
               </div>
               <div onClick={(e) => e.stopPropagation()}>{chartLegend}</div>
@@ -1044,14 +1084,14 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
             <StatCard label={t.statGain} value={gainStr(track.gainM)} />
             {/* The header's promise, quantified: how much of this course the
                 plan walks instead of pretending you'll run it. */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="text-xs uppercase tracking-wider text-zinc-400">
+            <div className={cardClass}>
+              <div className="text-xs uppercase tracking-wider text-zinc-400 light:text-zinc-500">
                 {t.statHike}
               </div>
               <div className="mt-1 text-2xl font-semibold tabular-nums">
                 {distStr(hikeMeters / 1000)}
               </div>
-              <div className="mt-0.5 text-sm tabular-nums text-zinc-400">
+              <div className="mt-0.5 text-sm tabular-nums text-zinc-400 light:text-zinc-600">
                 {t.walkedPct(
                   hikePct < 10 ? hikePct.toFixed(1) : hikePct.toFixed(0),
                 )}
@@ -1059,18 +1099,21 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
             </div>
             {/* The range IS the product thesis: a to-the-second finish would
                 be false precision. Center = the model's central estimate. */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="text-xs uppercase tracking-wider text-zinc-400">
+            <div className={cardClass}>
+              <div className="text-xs uppercase tracking-wider text-zinc-400 light:text-zinc-500">
                 {t.statFinish}
               </div>
               <div className="mt-1 text-2xl font-semibold tabular-nums">
                 {fmtClock(timeSec)}
               </div>
-              <div className="mt-0.5 text-sm tabular-nums text-zinc-400">
+              <div className="mt-0.5 text-sm tabular-nums text-zinc-400 light:text-zinc-600">
                 {t.expect} {fmtClockShort(range.lowSec)} –{" "}
                 {fmtClockShort(range.highSec)}
                 {calibrated && (
-                  <span className="text-emerald-400"> {t.calibratedTag}</span>
+                  <span className="text-emerald-400 light:text-emerald-600">
+                    {" "}
+                    {t.calibratedTag}
+                  </span>
                 )}
               </div>
             </div>
@@ -1080,14 +1123,14 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
           {/* Compact one-row share bar — the button label says what it does,
               so no explainer paragraph. siteUrl is taken at runtime so the
               watermark is correct on any domain. */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <div className={cardClass}>
             <div className="flex flex-wrap items-center gap-3">
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={t.courseNamePlaceholder}
                 aria-label={t.courseNameAria}
-                className="min-w-[12rem] flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+                className="min-w-[12rem] flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none light:border-zinc-300 light:bg-white light:text-zinc-900"
               />
               <button
                 type="button"
@@ -1100,16 +1143,13 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
               <button
                 type="button"
                 onClick={handleCopyLink}
-                className="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white"
+                className={btnSecondaryClass}
               >
                 {linkCopied ? t.copied : t.copyLink}
               </button>
             </div>
             {shareError && (
-              <div
-                role="alert"
-                className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
-              >
+              <div role="alert" className={`mt-3 ${alertClass}`}>
                 {shareError}
               </div>
             )}
@@ -1121,7 +1161,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <table className="w-full min-w-[34rem] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-zinc-700 text-xs uppercase tracking-wider text-zinc-400">
+                <tr className="border-b border-zinc-700 text-xs uppercase tracking-wider text-zinc-400 light:border-zinc-300 light:text-zinc-500">
                   <th className="py-2 pr-4 text-left font-medium">
                     {units === "imperial" ? "mi" : "km"}
                   </th>
@@ -1144,7 +1184,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                 {(showAllSplits ? splits : splits.slice(0, 12)).map((s) => (
                   <tr
                     key={s.km}
-                    className="border-b border-zinc-800/70 tabular-nums text-zinc-200 hover:bg-zinc-900/40"
+                    className="border-b border-zinc-800/70 tabular-nums text-zinc-200 hover:bg-zinc-900/40 light:border-zinc-200 light:text-zinc-800 light:hover:bg-zinc-100"
                   >
                     <td className="py-1.5 pr-4">
                       {s.km}
@@ -1162,11 +1202,13 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
                     </td>
                     <td className="py-1.5 pr-4 text-right">
                       {s.hikeFraction > 0 ? (
-                        <span className="text-emerald-400">
+                        <span className="text-emerald-400 light:text-emerald-600">
                           {(s.hikeFraction * 100).toFixed(0)}%
                         </span>
                       ) : (
-                        <span className="text-zinc-600">—</span>
+                        <span className="text-zinc-600 light:text-zinc-400">
+                          —
+                        </span>
                       )}
                     </td>
                     <td className="py-1.5 pr-4 text-right">
@@ -1183,7 +1225,7 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
               <button
                 type="button"
                 onClick={() => setShowAllSplits((v) => !v)}
-                className="mt-3 w-full rounded-md border border-zinc-800 py-2 text-sm text-zinc-400 hover:border-emerald-500 hover:text-zinc-200"
+                className="mt-3 w-full rounded-md border border-zinc-800 py-2 text-sm text-zinc-400 hover:border-emerald-500 hover:text-zinc-200 light:border-zinc-200 light:text-zinc-500 light:hover:text-zinc-800"
               >
                 {showAllSplits ? t.showFewer : t.showAll(splits.length)}
               </button>
@@ -1197,12 +1239,18 @@ function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
 
 function App() {
   const [lang, setLang] = useState<Lang>(initialLang);
+  const [theme, setTheme] = useState<Theme>(initialTheme);
   const t = MESSAGES[lang];
 
   // Keep the document language honest for screen readers / translators.
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
+
+  // The `light` class on <html> drives the light: variant (see index.css).
+  useEffect(() => {
+    document.documentElement.classList.toggle("light", theme === "light");
+  }, [theme]);
 
   function switchLang(next: Lang) {
     if (next === lang) return;
@@ -1215,6 +1263,17 @@ function App() {
     trackEvent("switch-lang", { to: next });
   }
 
+  function toggleTheme() {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    try {
+      localStorage.setItem("gp-theme", next);
+    } catch {
+      /* storage unavailable — the toggle still works for this session */
+    }
+    trackEvent("switch-theme", { to: next });
+  }
+
   return (
     <main className="min-h-screen px-4 py-10">
       {/* max-w-5xl: the previous 3xl column read as a narrow stripe on large
@@ -1222,29 +1281,40 @@ function App() {
       <div className="mx-auto max-w-5xl">
         <div className="flex items-start justify-between gap-4">
           <h1 className="text-3xl font-bold tracking-tight">GradePace</h1>
-          <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs">
-            {(["en", "fr"] as const).map((l) => (
-              <button
-                key={l}
-                type="button"
-                onClick={() => switchLang(l)}
-                aria-pressed={lang === l}
-                className={`px-2.5 py-1 font-medium uppercase ${
-                  lang === l
-                    ? "bg-zinc-700 text-white"
-                    : "bg-zinc-900 text-zinc-500 hover:text-zinc-200"
-                }`}
-              >
-                {l}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? t.themeToLight : t.themeToDark}
+              title={theme === "dark" ? t.themeToLight : t.themeToDark}
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-sm text-zinc-400 hover:text-zinc-100 light:border-zinc-300 light:bg-white light:text-zinc-500 light:hover:text-zinc-900"
+            >
+              {theme === "dark" ? "☀" : "☾"}
+            </button>
+            <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs light:border-zinc-300">
+              {(["en", "fr"] as const).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => switchLang(l)}
+                  aria-pressed={lang === l}
+                  className={`px-2.5 py-1 font-medium uppercase ${
+                    lang === l
+                      ? "bg-zinc-700 text-white light:bg-zinc-800"
+                      : "bg-zinc-900 text-zinc-500 hover:text-zinc-200 light:bg-white light:hover:text-zinc-800"
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-        <p className="mt-2 text-zinc-300">{t.tagline}</p>
+        <p className="mt-2 text-zinc-300 light:text-zinc-700">{t.tagline}</p>
         <div className="mt-6">
-          <GpxUpload t={t} lang={lang} />
+          <GpxUpload t={t} lang={lang} theme={theme} />
         </div>
-        <footer className="mt-14 border-t border-zinc-800 pt-6 text-sm text-zinc-500">
+        <footer className="mt-14 border-t border-zinc-800 pt-6 text-sm text-zinc-500 light:border-zinc-200">
           <p>
             {t.footerBuiltBy}{" "}
             <a
@@ -1252,17 +1322,17 @@ function App() {
               target="_blank"
               rel="noopener noreferrer"
               data-umami-event="click-x"
-              className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400"
+              className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400 light:text-zinc-700 light:decoration-zinc-400 light:hover:text-emerald-700"
             >
               Alvaro Serero
             </a>{" "}
             {t.footerTraining}{" "}
             <a
-              href="https://github.com/Alvaro5/trail-app"
+              href="https://github.com/Alvaro5/grade-pace"
               target="_blank"
               rel="noopener noreferrer"
               data-umami-event="click-github"
-              className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400"
+              className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400 light:text-zinc-700 light:decoration-zinc-400 light:hover:text-emerald-700"
             >
               {t.footerOpenSource}
             </a>

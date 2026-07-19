@@ -20,6 +20,7 @@ export default function ElevationChart({
   hikeAboveGrade = 0.18,
   height = 160,
   labels = { elevation: "elevation", powerHike: "power-hike" },
+  theme = "dark",
 }: {
   profile: { km: number; ele: number }[];
   units?: "metric" | "imperial";
@@ -30,7 +31,11 @@ export default function ElevationChart({
   height?: number | `${number}%`;
   // Tooltip words, provided by the caller so the chart follows the app language.
   labels?: { elevation: string; powerHike: string };
+  // SVG attributes can't use Tailwind variants, so the grid/tooltip colors
+  // come from a prop instead of CSS.
+  theme?: "dark" | "light";
 }) {
+  const dark = theme === "dark";
   const imperial = units === "imperial";
   const eleUnit = imperial ? "ft" : "m";
   const distUnit = imperial ? "mi" : "km";
@@ -107,7 +112,7 @@ export default function ElevationChart({
             ))}
           </linearGradient>
         </defs>
-        <CartesianGrid stroke="#27272a" vertical={false} />
+        <CartesianGrid stroke={dark ? "#27272a" : "#e4e4e7"} vertical={false} />
         <XAxis
           dataKey="km"
           type="number"
@@ -126,12 +131,13 @@ export default function ElevationChart({
         />
         <Tooltip
           contentStyle={{
-            background: "#18181b",
-            border: "1px solid #3f3f46",
+            background: dark ? "#18181b" : "#ffffff",
+            border: `1px solid ${dark ? "#3f3f46" : "#d4d4d8"}`,
             borderRadius: 8,
             fontSize: 12,
+            color: dark ? "#fafafa" : "#18181b",
           }}
-          labelStyle={{ color: "#a1a1aa" }}
+          labelStyle={{ color: dark ? "#a1a1aa" : "#52525b" }}
           formatter={(v, _name, item) => {
             const p = item?.payload as { grade?: number; hike?: boolean };
             const g = p?.grade ?? 0;

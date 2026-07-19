@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
+/* Light theme is opt-in via a `light` class on <html> (see App.tsx). Dark is
+   the brand default, so components carry dark styles unprefixed and add
+   `light:` overrides only where a color needs to flip. */
+@custom-variant light (&:where(.light, .light *));
+
 body {
   background-color: #09090b; /* zinc-950 */
   color: #fafafa; /* zinc-50 */
+}
+
+.light body {
+  background-color: #fafafa; /* zinc-50 */
+  color: #18181b; /* zinc-900 */
 }

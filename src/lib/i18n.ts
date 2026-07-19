@@ -113,6 +113,8 @@ const en = {
   footerTraining:
     "while training for the Imperial Trail 70k, Fontainebleau —",
   footerOpenSource: "open source on GitHub",
+  themeToLight: "Switch to light mode",
+  themeToDark: "Switch to dark mode",
 };
 
 export type Messages = typeof en;
@@ -217,6 +219,8 @@ const fr: Messages = {
   footerBuiltBy: "Créé par",
   footerTraining: "en préparant l'Imperial Trail 70k à Fontainebleau —",
   footerOpenSource: "open source sur GitHub",
+  themeToLight: "Passer en mode clair",
+  themeToDark: "Passer en mode sombre",
 };
 
 export const MESSAGES: Record<Lang, Messages> = { en, fr };

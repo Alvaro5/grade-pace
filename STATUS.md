@@ -339,6 +339,19 @@
   - Light-theme toggle: NOT in this batch (dark-only today); queued as its
     own pass — touches every color class.
 
+- **Light theme.** Dark stays the brand default; light is a Tailwind v4
+  custom variant (`@custom-variant light` in index.css, driven by a `light`
+  class on `<html>`). Components carry dark styles unprefixed + `light:`
+  overrides; repeated clusters are shared constants (cardClass, inputClass,
+  btnSecondaryClass, alertClass) so the themes can't drift per-instance.
+  Sun/moon toggle next to EN|FR; preference saved (`gp-theme`), else follows
+  `prefers-color-scheme`. Chart grid/tooltip colors via a `theme` prop (SVG
+  attrs can't use CSS variants). Share card stays dark always (brand
+  surface). `switch-theme` analytics event. Verified both themes live.
+- **Repo renamed trail-app → grade-pace** (owner): git remote, package.json
+  name, and the footer GitHub link updated to
+  github.com/Alvaro5/grade-pace.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay
