@@ -45,6 +45,11 @@ import {
 // Type-only imports from the lazy chunk — erased at build time, so they
 // don't pull Leaflet into the main bundle.
 import type { CourseMapLabels, PoiState } from "./CourseMap";
+import {
+  computeNutrition,
+  DEFAULT_RATES,
+  type NutritionRates,
+} from "./lib/nutrition";
 import { MESSAGES, initialLang, type Lang, type Messages } from "./lib/i18n";
 // Aliased: `track` is taken by the parsed-GPX state variable in GpxUpload.
 import { track as trackEvent } from "./lib/analytics";
@@ -243,7 +248,21 @@ type HashPlan = {
   tf?: number;
   units?: Units;
   rav?: number[]; // aid-station positions, metric km (canonical in the hash)
+  // Nutrition rates (nc/nfl/ns) — encoded only when they differ from the
+  // defaults, so typical links stay short.
+  nc?: number;
+  nfl?: number;
+  ns?: number;
 };
+
+// Slider bounds for the nutrition rates, shared by the UI and the hash
+// validation so a crafted link can't smuggle absurd values.
+const CARBS_MIN = 30,
+  CARBS_MAX = 120;
+const FLUID_MIN = 250,
+  FLUID_MAX = 1000;
+const SODIUM_MIN = 300,
+  SODIUM_MAX = 1200;
 
 function readPlanFromHash(): HashPlan {
   try {
@@ -268,6 +287,12 @@ function readPlanFromHash(): HashPlan {
         .slice(0, 30);
       if (kms.length) plan.rav = kms;
     }
+    const nc = Number(p.get("nc"));
+    if (nc >= CARBS_MIN && nc <= CARBS_MAX) plan.nc = Math.round(nc);
+    const nfl = Number(p.get("nfl"));
+    if (nfl >= FLUID_MIN && nfl <= FLUID_MAX) plan.nfl = Math.round(nfl);
+    const ns = Number(p.get("ns"));
+    if (ns >= SODIUM_MIN && ns <= SODIUM_MAX) plan.ns = Math.round(ns);
     return plan;
   } catch {
     return {}; // malformed hash → plain defaults, never a crash
@@ -409,6 +434,13 @@ function GpxUpload({
   const [terrainFactor, setTerrainFactor] = useState(
     hashPlan.tf ?? DEFAULT_TERRAIN_FACTOR,
   );
+  // Nutrition rates (per hour). Like the effort inputs, a shared link can
+  // carry them; otherwise the sports-science mid-band defaults apply.
+  const [nutriRates, setNutriRates] = useState<NutritionRates>({
+    carbsGPerH: hashPlan.nc ?? DEFAULT_RATES.carbsGPerH,
+    fluidMlPerH: hashPlan.nfl ?? DEFAULT_RATES.fluidMlPerH,
+    sodiumMgPerH: hashPlan.ns ?? DEFAULT_RATES.sodiumMgPerH,
+  });
   // Course name shown on the shareable image; prefilled on load, editable.
   const [title, setTitle] = useState("");
   const [sharing, setSharing] = useState(false);
@@ -540,6 +572,13 @@ function GpxUpload({
         units === "imperial" ? aidNums.map((v) => v * KM_PER_MI) : aidNums;
       params.set("rav", kms.map((k) => +k.toFixed(1)).join(","));
     }
+    // Nutrition rates travel only when customized — links stay short.
+    if (nutriRates.carbsGPerH !== DEFAULT_RATES.carbsGPerH)
+      params.set("nc", String(nutriRates.carbsGPerH));
+    if (nutriRates.fluidMlPerH !== DEFAULT_RATES.fluidMlPerH)
+      params.set("nfl", String(nutriRates.fluidMlPerH));
+    if (nutriRates.sodiumMgPerH !== DEFAULT_RATES.sodiumMgPerH)
+      params.set("ns", String(nutriRates.sodiumMgPerH));
     const url = `${window.location.origin}${window.location.pathname}#${params.toString()}`;
     try {
       await navigator.clipboard.writeText(url);
@@ -937,6 +976,23 @@ function GpxUpload({
     list.push(i + 1);
     aidByBucket.set(idx, list);
   });
+
+  // Nutrition plan: hourly targets × each leg's projected duration. Cheap
+  // enough to derive every render, so it always tracks the current plan.
+  const nutrition = track
+    ? computeNutrition(timeSec, track.distanceKm, aidStops, nutriRates)
+    : null;
+  // Leg endpoint names: Start → R1 → … → Finish.
+  const legName = (i: number, last: number) =>
+    `${i === 0 ? t.mapStart : `R${i}`} → ${i === last ? t.mapFinish : `R${i + 1}`}`;
+  const carbsStr = (g: number) => `${Math.round(g)} g`;
+  const fluidStr = (ml: number) =>
+    units === "imperial"
+      ? `${Math.round(ml / 29.5735)} oz`
+      : ml >= 1000
+        ? `${(ml / 1000).toLocaleString(numLocale, { maximumFractionDigits: 1 })} L`
+        : `${Math.round(ml / 10) * 10} ml`;
+  const sodiumStr = (mg: number) => `${Math.round(mg / 10) * 10} mg`;
 
   // Render the current plan to a branded PNG and share it (native share sheet
   // when available, e.g. mobile) or download it. Every shared card carries the
@@ -1632,6 +1688,149 @@ function GpxUpload({
               </div>
             )}
           </div>
+
+          {/* Nutrition plan: collapsed by default (same pattern as the
+              calibration card) — it's a planning tool, not landing-page
+              content. Legs follow the aid stations; without any, the whole
+              race is one leg and the totals still teach the hourly targets. */}
+          {nutrition && nutrition.legs.length > 0 && (
+            <details
+              className={cardClass}
+              onToggle={(e) =>
+                (e.currentTarget as HTMLDetailsElement).open &&
+                trackEvent("nutrition-open")
+              }
+            >
+              <summary className="flex cursor-pointer flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-500 light:hover:text-zinc-800">
+                <ChevronIcon className="chev h-3.5 w-3.5" />
+                {t.nutritionTitle}
+                <span className="ml-1 font-normal normal-case tracking-normal text-zinc-500">
+                  {t.nutritionSubtitle}
+                </span>
+              </summary>
+              <p className="mt-3 text-sm text-zinc-400 light:text-zinc-600">
+                {t.nutritionIntro}
+              </p>
+              <div className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                <SliderField
+                  label={t.carbsLabel}
+                  hint={t.carbsHint}
+                  display={`${nutriRates.carbsGPerH} g/h`}
+                  value={nutriRates.carbsGPerH}
+                  min={CARBS_MIN}
+                  max={CARBS_MAX}
+                  step={5}
+                  onChange={(n) =>
+                    setNutriRates((r) => ({ ...r, carbsGPerH: n }))
+                  }
+                />
+                <SliderField
+                  label={t.fluidLabel}
+                  hint={t.fluidHint}
+                  display={`${nutriRates.fluidMlPerH} ml/h`}
+                  value={nutriRates.fluidMlPerH}
+                  min={FLUID_MIN}
+                  max={FLUID_MAX}
+                  step={50}
+                  onChange={(n) =>
+                    setNutriRates((r) => ({ ...r, fluidMlPerH: n }))
+                  }
+                />
+                <SliderField
+                  label={t.sodiumLabel}
+                  hint={t.sodiumHint}
+                  display={`${nutriRates.sodiumMgPerH} mg/h`}
+                  value={nutriRates.sodiumMgPerH}
+                  min={SODIUM_MIN}
+                  max={SODIUM_MAX}
+                  step={50}
+                  onChange={(n) =>
+                    setNutriRates((r) => ({ ...r, sodiumMgPerH: n }))
+                  }
+                />
+              </div>
+              <div className="-mx-4 mt-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                <table className="w-full min-w-[30rem] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-700 text-xs uppercase tracking-wider text-zinc-400 light:border-zinc-300 light:text-zinc-500">
+                      <th className="py-2 pr-4 text-left font-medium">
+                        {t.legLabel}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.colDuration}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.colCarbs}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.colFluid}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.colSodium}
+                      </th>
+                      <th className="py-2 text-right font-medium">
+                        {t.colKcal}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nutrition.legs.map((leg, i) => (
+                      <tr
+                        key={leg.startSec}
+                        className="border-b border-zinc-800/70 tabular-nums text-zinc-200 transition-colors hover:bg-zinc-900/40 light:border-zinc-200 light:text-zinc-800 light:hover:bg-zinc-100"
+                      >
+                        <td className="py-1.5 pr-4">
+                          {legName(i, nutrition.legs.length - 1)}
+                          <span className="ml-1.5 text-xs text-zinc-500">
+                            {distStr(leg.toKm - leg.fromKm)}
+                          </span>
+                        </td>
+                        <td className="py-1.5 pr-4 text-right">
+                          {fmtClockShort(leg.durationSec)}
+                        </td>
+                        <td className="py-1.5 pr-4 text-right">
+                          {carbsStr(leg.carbsG)}
+                        </td>
+                        <td className="py-1.5 pr-4 text-right">
+                          {fluidStr(leg.fluidMl)}
+                        </td>
+                        <td className="py-1.5 pr-4 text-right">
+                          {sodiumStr(leg.sodiumMg)}
+                        </td>
+                        <td className="py-1.5 text-right">
+                          {Math.round(leg.kcal)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="font-semibold tabular-nums text-zinc-100 light:text-zinc-900">
+                      <td className="py-2 pr-4">{t.nutritionTotal}</td>
+                      <td className="py-2 pr-4 text-right">
+                        {fmtClockShort(nutrition.totals.durationSec)}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {carbsStr(nutrition.totals.carbsG)}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {fluidStr(nutrition.totals.fluidMl)}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {sodiumStr(nutrition.totals.sodiumMg)}
+                      </td>
+                      <td className="py-2 text-right">
+                        {Math.round(nutrition.totals.kcal)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-sm text-zinc-400 light:text-zinc-600">
+                {t.gelsHint(Math.round(nutrition.gels))}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {t.nutritionDisclaimer}
+              </p>
+            </details>
+          )}
 
           {/* On a phone six columns can't fit; let the table keep a readable
               min-width and scroll horizontally inside its own box so the page

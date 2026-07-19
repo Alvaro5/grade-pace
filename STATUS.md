@@ -506,6 +506,25 @@
     Wrapper keeps the `relative z-0` stacking fix; the Leaflet div gets
     explicit `z-0` so its internal panes flatten below the `z-10` chips.
 
+- **Nutrition plan (owner request: carbs, calories, electrolytes, water "at
+  each moment of the race").** Pure lib `src/lib/nutrition.ts` (+8 tests):
+  hourly targets × each leg's PROJECTED duration — the legs partition the
+  race at the aid-station ETAs (start → R1 → … → finish; no stations = one
+  leg), so amounts follow time, not distance: a slow climb-heavy leg gets
+  proportionally more. Defaults sit mid-band of published guidance — carbs
+  70 g/h (60–90 ultra band), fluid 500 ml/h (400–750, heat-scaled), sodium
+  450 mg/h — sliders 30–120 / 250–1000 / 300–1200 (sodium range wide on
+  purpose: sweat sodium varies 3–4×; hint clarifies elemental sodium vs
+  salt, 1 g salt ≈ 390 mg Na). UI: collapsed `<details>` card above the
+  splits table — three sliders + per-leg table (duration/carbs/fluids/
+  sodium/kcal), totals row, ≈gels equivalent (25 g each), one-line
+  disclaimer. Fluid displays ml/L (fl oz in imperial), FR/EN. Rates travel
+  in the share link (`nc`/`nfl`/`ns`, validated to slider bounds, written
+  only when ≠ default). Kcal = carbs × 4 — deliberately carbs-only (fat/
+  protein intake isn't what limits ultra performance mid-race).
+  Verified live: 7:35:30 projection → 531 g / 3.8 L / 3420 mg / 2126 kcal
+  totals, leg partition matches ETAs (checked against hand math).
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

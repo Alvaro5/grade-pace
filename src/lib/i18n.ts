@@ -137,6 +137,29 @@ const en = {
   poiWater: "drinking water",
   poiToilets: "toilets",
   poiViewpoint: "viewpoint",
+  nutritionTitle: "Nutrition plan",
+  nutritionSubtitle: "· carbs, fluids, sodium per leg",
+  nutritionIntro:
+    "Hourly targets applied to each leg of your plan — between two aid stations, this is what to carry and consume. Amounts follow the projected time, not the distance.",
+  carbsLabel: "Carbohydrates",
+  carbsHint:
+    "g per hour — 60–90 g/h is the ultra range; above 90 needs a trained gut",
+  fluidLabel: "Fluids",
+  fluidHint: "ml per hour — raise in heat, lower in cold",
+  sodiumLabel: "Sodium",
+  sodiumHint:
+    "mg of sodium per hour (1 g of salt ≈ 390 mg sodium) — salty sweaters need more",
+  legLabel: "leg",
+  colDuration: "time",
+  colCarbs: "carbs",
+  colFluid: "fluids",
+  colSodium: "sodium",
+  colKcal: "kcal",
+  nutritionTotal: "Total",
+  gelsHint: (n: number) =>
+    `≈ ${n} gels over the race (25 g of carbs each) — mix with drinks, bars and real food to taste.`,
+  nutritionDisclaimer:
+    "General guidance, not medical advice — train your race nutrition on long outings.",
 };
 
 export type Messages = typeof en;
@@ -267,6 +290,29 @@ const fr: Messages = {
   poiWater: "eau potable",
   poiToilets: "toilettes",
   poiViewpoint: "point de vue",
+  nutritionTitle: "Plan nutrition",
+  nutritionSubtitle: "· glucides, hydratation, sodium par tronçon",
+  nutritionIntro:
+    "Des objectifs horaires appliqués à chaque tronçon du plan — entre deux ravitaillements, voilà quoi emporter et consommer. Les quantités suivent le temps projeté, pas la distance.",
+  carbsLabel: "Glucides",
+  carbsHint:
+    "g par heure — 60–90 g/h pour l'ultra ; au-delà de 90, intestin entraîné obligatoire",
+  fluidLabel: "Hydratation",
+  fluidHint: "ml par heure — davantage par forte chaleur, moins par temps froid",
+  sodiumLabel: "Sodium",
+  sodiumHint:
+    "mg de sodium par heure (1 g de sel ≈ 390 mg de sodium) — transpiration salée = besoins plus élevés",
+  legLabel: "tronçon",
+  colDuration: "durée",
+  colCarbs: "glucides",
+  colFluid: "boisson",
+  colSodium: "sodium",
+  colKcal: "kcal",
+  nutritionTotal: "Total",
+  gelsHint: (n: number) =>
+    `≈ ${n} gels sur la course (25 g de glucides chacun) — à panacher avec boissons, barres et solide selon vos goûts.`,
+  nutritionDisclaimer:
+    "Des repères généraux, pas un avis médical — entraînez votre nutrition de course sur vos sorties longues.",
 };
 
 export const MESSAGES: Record<Lang, Messages> = { en, fr };

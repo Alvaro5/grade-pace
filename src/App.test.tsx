@@ -98,4 +98,43 @@ describe("App smoke test", () => {
       window.location.hash = "";
     }
   });
+
+  it("renders the nutrition card with legs from the aid stations", async () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    await act(async () => {
+      createRoot(container).render(<App />);
+    });
+    await flush();
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Nutrition plan");
+    // No stations on the example → one Start → Finish leg + totals row.
+    expect(text).toContain("Start → Finish");
+    expect(text).toContain("Total");
+    // Defaults visible on the sliders.
+    expect(text).toContain("70 g/h");
+    expect(text).toContain("500 ml/h");
+    expect(text).toContain("450 mg/h");
+    expect(text).toContain("gels");
+  });
+
+  it("restores customized nutrition rates from the URL hash", async () => {
+    window.location.hash = "#nc=90&nfl=750&ns=800";
+    try {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+      await act(async () => {
+        createRoot(container).render(<App />);
+      });
+      await flush();
+
+      const text = container.textContent ?? "";
+      expect(text).toContain("90 g/h");
+      expect(text).toContain("750 ml/h");
+      expect(text).toContain("800 mg/h");
+    } finally {
+      window.location.hash = "";
+    }
+  });
 });

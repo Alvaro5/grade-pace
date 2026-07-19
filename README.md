@@ -79,6 +79,8 @@ src/
   lib/basemaps.ts      Basemap catalog: terrain / standard / satellite / hybrid.
   lib/pois.ts          Overpass POIs (water, toilets, viewpoints): bbox query,
                        endpoint fallback, client-side route-corridor filter.
+  lib/nutrition.ts     Nutrition plan: hourly carb/fluid/sodium targets applied
+                       to each projected leg between aid stations.
   App.tsx              UI: upload, effort inputs, calibration, share, table.
   ElevationChart.tsx   Grade-colored profile (lazy-loaded Recharts chunk).
   CourseMap.tsx        Map with the grade-colored route, aid stations, basemap
