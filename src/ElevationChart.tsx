@@ -66,6 +66,18 @@ export default function ElevationChart({
     };
   });
 
+  // Padded Y domain so the profile uses the panel instead of anchoring at 0.
+  let eleMin = Infinity;
+  let eleMax = -Infinity;
+  for (const d of data) {
+    if (d.ele < eleMin) eleMin = d.ele;
+    if (d.ele > eleMax) eleMax = d.ele;
+  }
+  const elePad = Math.max((eleMax - eleMin) * 0.08, 1);
+  const eleDomain: [number, number] = Number.isFinite(eleMin)
+    ? [Math.floor(eleMin - elePad), Math.ceil(eleMax + elePad)]
+    : [0, 1];
+
   // Grade-colored stroke: a horizontal gradient, run-length encoded — a pair
   // of stops per color CHANGE, not per sample. Uniform sampling missed the
   // point of the feature: on a 70 km course a fixed ~150 samples lands every
@@ -122,8 +134,12 @@ export default function ElevationChart({
           fontSize={12}
           tickLine={false}
         />
+        {/* Padded explicit domain instead of a forced 0-baseline: a course
+            living at 70–160 m otherwise spends half the panel on empty space
+            and every hill flattens. */}
         <YAxis
           width={52}
+          domain={[eleDomain[0], eleDomain[1]]}
           stroke="#71717a"
           fontSize={12}
           tickLine={false}
@@ -149,12 +165,17 @@ export default function ElevationChart({
           }}
           labelFormatter={(v) => `${distUnit} ${Number(v).toFixed(1)}`}
         />
+        {/* No path animation: with ~7k resampled points it fights custom
+            domains/baselines in Recharts, and it re-played on every input
+            keystroke anyway. The page-level fade covers the entrance. */}
         <Area
           type="monotone"
           dataKey="ele"
+          baseValue={eleDomain[0]}
           stroke="url(#gradeStroke)"
           strokeWidth={2.5}
           fill="url(#ele)"
+          isAnimationActive={false}
         />
       </AreaChart>
     </ResponsiveContainer>

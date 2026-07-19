@@ -84,7 +84,7 @@ const en = {
   shareImage: "Share image",
   creatingImage: "Creating image…",
   copyLink: "Copy link",
-  copied: "Copied ✓",
+  copied: "Copied",
   shareText: (title: string) =>
     `My ${title} race plan — built with GradePace`,
   shareFailed: "Couldn't create the share image. Please try again.",
@@ -193,7 +193,7 @@ const fr: Messages = {
   shareImage: "Partager l'image",
   creatingImage: "Création…",
   copyLink: "Copier le lien",
-  copied: "Copié ✓",
+  copied: "Copié",
   shareText: (title: string) =>
     `Mon plan de course ${title} — créé avec GradePace`,
   shareFailed: "Impossible de créer l'image. Réessayez.",

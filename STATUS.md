@@ -371,6 +371,22 @@
   - Projected-finish card gets an emerald accent border (the hero number).
   Verified in both themes and both languages.
 
+- **UI detail pass #2.**
+  - *Chart uses its panel:* padded explicit Y domain (min−8%…max+8%) instead
+    of the 0-anchored axis that flattened every hill on courses living at
+    altitude; Area baseline follows the domain floor. Path animation OFF —
+    it silently broke rendering with custom domains on ~7k points in
+    Recharts, and it re-played on every keystroke anyway (page-level fade
+    covers the entrance).
+  - *Pace input has its unit inside the field* (min/km · min/mi suffix,
+    larger text) — the app's one important input now reads as a unit-aware
+    control.
+  - *Sticky opaque table header* — headers survive "show all 70 splits".
+  - *Locale thousands separators* for elevation numbers (1,193 / 1 193).
+  - *Share bar icons* (image/link/check states) + active:scale press feel on
+    primary/secondary buttons.
+  - *theme-color meta follows the theme* so mobile browser chrome matches.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

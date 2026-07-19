@@ -34,6 +34,9 @@ import {
   ExpandIcon,
   CloseIcon,
   ChevronIcon,
+  ImageIcon,
+  LinkIcon,
+  CheckIcon,
   LogoMark,
 } from "./icons";
 
@@ -243,8 +246,8 @@ const heroCardClass =
   "rounded-xl border border-emerald-600/40 bg-zinc-900/50 p-4 light:border-emerald-500/40 light:bg-white";
 const inputClass =
   "w-28 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 tabular-nums transition-colors focus:border-emerald-500 focus:outline-none light:border-zinc-300 light:bg-white light:text-zinc-900";
-const btnPrimaryClass = `inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
-const btnSecondaryClass = `inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-emerald-500 hover:text-white light:border-zinc-300 light:bg-white light:text-zinc-700 light:hover:text-emerald-700 ${focusRing}`;
+const btnPrimaryClass = `inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
+const btnSecondaryClass = `inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:border-emerald-500 hover:text-white active:scale-[0.98] light:border-zinc-300 light:bg-white light:text-zinc-700 light:hover:text-emerald-700 ${focusRing}`;
 const alertClass =
   "rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200 light:text-amber-800";
 
@@ -440,14 +443,16 @@ function GpxUpload({
   }
 
   // Display helpers for the active unit — data underneath stays metric.
+  // Thousands separators follow the UI language (1,193 ft / 1 193 ft).
+  const numLocale = lang === "fr" ? "fr-FR" : "en-US";
   const distStr = (km: number) =>
     units === "imperial"
       ? `${(km / KM_PER_MI).toFixed(2)} mi`
       : `${km.toFixed(2)} km`;
   const gainStr = (m: number) =>
     units === "imperial"
-      ? `${Math.round(m * FT_PER_M)} ft`
-      : `${m.toFixed(0)} m`;
+      ? `${Math.round(m * FT_PER_M).toLocaleString(numLocale)} ft`
+      : `${Math.round(m).toLocaleString(numLocale)} m`;
   const paceStr = (secPerKm: number) =>
     units === "imperial"
       ? `${fmtPace(secPerKm * KM_PER_MI)}/mi`
@@ -867,12 +872,20 @@ function GpxUpload({
                   units === "imperial" ? t.paceHintImperial : t.paceHintMetric
                 }
               >
-                <input
-                  value={paceText}
-                  onChange={(e) => handlePaceChange(e.target.value)}
-                  aria-invalid={!paceValid}
-                  className={`${inputClass} ${paceValid ? "" : "border-rose-500 focus:border-rose-500"}`}
-                />
+                {/* Unit suffix lives INSIDE the field — this is the app's one
+                    important input, so it reads as a unit-aware control, not
+                    an anonymous text box. */}
+                <span className="relative inline-block w-36">
+                  <input
+                    value={paceText}
+                    onChange={(e) => handlePaceChange(e.target.value)}
+                    aria-invalid={!paceValid}
+                    className={`${inputClass} w-full pr-16 text-base ${paceValid ? "" : "border-rose-500 focus:border-rose-500"}`}
+                  />
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
+                    min/{units === "imperial" ? "mi" : "km"}
+                  </span>
+                </span>
                 {!paceValid && (
                   <span className="text-xs text-rose-400 light:text-rose-600">
                     {t.paceInvalid(
@@ -1186,6 +1199,7 @@ function GpxUpload({
                 disabled={sharing}
                 className={btnPrimaryClass}
               >
+                <ImageIcon />
                 {sharing ? t.creatingImage : t.shareImage}
               </button>
               <button
@@ -1193,6 +1207,11 @@ function GpxUpload({
                 onClick={handleCopyLink}
                 className={btnSecondaryClass}
               >
+                {linkCopied ? (
+                  <CheckIcon className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <LinkIcon />
+                )}
                 {linkCopied ? t.copied : t.copyLink}
               </button>
             </div>
@@ -1208,7 +1227,9 @@ function GpxUpload({
               layout never breaks. */}
           <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
             <table className="w-full min-w-[34rem] border-collapse text-sm">
-              <thead>
+              {/* Sticky + opaque: with all ~70 splits open you'd otherwise
+                  lose which column is which three screens down. */}
+              <thead className="sticky top-0 z-10 bg-zinc-950 light:bg-zinc-50">
                 <tr className="border-b border-zinc-700 text-xs uppercase tracking-wider text-zinc-400 light:border-zinc-300 light:text-zinc-500">
                   <th className="py-2 pr-4 text-left font-medium">
                     {units === "imperial" ? "mi" : "km"}
@@ -1296,8 +1317,12 @@ function App() {
   }, [lang]);
 
   // The `light` class on <html> drives the light: variant (see index.css).
+  // theme-color follows along so mobile browser chrome matches the page.
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", theme === "light" ? "#fafafa" : "#18181b");
   }, [theme]);
 
   function switchLang(next: Lang) {

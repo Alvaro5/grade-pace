@@ -94,6 +94,54 @@ export const ChevronIcon = ({ className = "h-4 w-4" }: IconProps) => (
   </svg>
 );
 
+export const ImageIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden
+  >
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <circle cx="9" cy="9" r="2" />
+    <path d="m21 15-3.5-3.5L9 20" />
+  </svg>
+);
+
+export const LinkIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden
+  >
+    <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+    <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+  </svg>
+);
+
+export const CheckIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden
+  >
+    <path d="m4 12.5 5 5L20 6.5" />
+  </svg>
+);
+
 // The brand mark — the same trend-line motif as the share card and favicon,
 // so the app header and every shared image read as one product.
 export const LogoMark = ({ className = "h-5 w-5" }: IconProps) => (
