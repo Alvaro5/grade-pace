@@ -234,6 +234,9 @@ function GpxUpload() {
   const [title, setTitle] = useState("");
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  // The full table is ~70 rows for a 70k — collapsed by default so the page
+  // ends near the stats instead of scrolling forever.
+  const [showAllSplits, setShowAllSplits] = useState(false);
   // True while the dashboard shows the bundled course (auto-loaded or clicked),
   // so we can badge it as an example rather than let it pass for the visitor's
   // own race. Cleared the moment a user upload succeeds.
@@ -577,8 +580,7 @@ function GpxUpload() {
         )}
       </div>
       <p className="mt-2 text-xs text-zinc-500">
-        Or drop a .gpx file anywhere on the page. It's parsed right here in
-        your browser — it never leaves your device.
+        Or drop a .gpx anywhere — parsed in your browser, never uploaded.
       </p>
 
       {error && (
@@ -598,8 +600,8 @@ function GpxUpload() {
                 Example
               </span>
               <span className="text-zinc-400">
-                Imperial Trail, Fontainebleau (70k) — upload your own GPX above
-                to plan your race.
+                Imperial Trail, Fontainebleau (70k) — upload yours to plan
+                your race.
               </span>
             </div>
           )}
@@ -628,7 +630,7 @@ function GpxUpload() {
             <div className="mt-3">
               <Field
                 label="Your easy flat-road pace"
-                hint={`min/${units === "imperial" ? "mile" : "km"} — a pace you could hold for hours on flat ground. We adjust it for every hill on the course.`}
+                hint={`min/${units === "imperial" ? "mile" : "km"}, a pace you could hold for hours on flat ground`}
               >
                 <input
                   value={paceText}
@@ -695,17 +697,22 @@ function GpxUpload() {
           </div>
 
           {/* Self-calibration: measure the terrain factor from a recorded run
-              instead of guessing the slider. */}
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              instead of guessing the slider. Collapsed by default — it's a
+              power feature and the expanded paragraph was landing-page
+              clutter for first-time visitors. */}
+          <details className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200">
               Calibrate from a real run
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400">
+              <span className="ml-2 font-normal normal-case tracking-normal text-zinc-500">
+                {calibrated
+                  ? `· applied ×${terrainFactor.toFixed(2)}`
+                  : "· measure your terrain factor"}
+              </span>
+            </summary>
+            <p className="mt-3 text-sm text-zinc-400">
               Upload a run you <span className="text-zinc-200">recorded</span>{" "}
-              (a GPX with timestamps, from your watch or phone). We predict that
-              run with your pace settings, compare against what you actually
-              did — stops filtered out — and measure your personal terrain
-              factor instead of guessing it.
+              (with timestamps). We compare it against the model — stops
+              filtered out — and measure your personal terrain factor.
             </p>
             <input
               type="file"
@@ -761,7 +768,7 @@ function GpxUpload() {
                 )}
               </div>
             )}
-          </div>
+          </details>
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             {/* Fixed-height fallback so the layout doesn't jump when the
@@ -793,24 +800,24 @@ function GpxUpload() {
             </div>
           </div>
           <p className="text-xs text-zinc-500">
-            A range, not a promise: day-of conditions swing a race this long by
-            20–40 minutes. Calibrating from a real run narrows the band.
+            A range, not a promise — day-of conditions swing a long race by
+            20–40 min. Calibrating narrows it.
           </p>
 
           {/* Share/export: render the plan to a branded PNG. The course name
               feeds the image title; siteUrl is taken at runtime so the
               watermark is correct on any domain. */}
+          {/* Compact one-row share bar — the button label says what it does,
+              so no explainer paragraph. */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <div className="flex flex-wrap items-end gap-4">
-              <label className="flex min-w-[12rem] flex-1 flex-col gap-1 text-sm">
-                <span className="text-zinc-300">Course name</span>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Name your race"
-                  className="w-full rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 focus:border-emerald-500 focus:outline-none"
-                />
-              </label>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Course name"
+                aria-label="Course name for the share image"
+                className="min-w-[12rem] flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
+              />
               <button
                 type="button"
                 onClick={handleShare}
@@ -820,10 +827,6 @@ function GpxUpload() {
                 {sharing ? "Creating image…" : "Share image"}
               </button>
             </div>
-            <p className="mt-2 text-xs text-zinc-500">
-              Download a shareable image of your plan — distance, climb, and
-              projected finish.
-            </p>
             {shareError && (
               <div
                 role="alert"
@@ -852,7 +855,7 @@ function GpxUpload() {
                 </tr>
               </thead>
               <tbody>
-                {splits.map((s) => (
+                {(showAllSplits ? splits : splits.slice(0, 12)).map((s) => (
                   <tr
                     key={s.km}
                     className="border-b border-zinc-800/70 tabular-nums text-zinc-200 hover:bg-zinc-900/40"
@@ -890,6 +893,17 @@ function GpxUpload() {
                 ))}
               </tbody>
             </table>
+            {splits.length > 12 && (
+              <button
+                type="button"
+                onClick={() => setShowAllSplits((v) => !v)}
+                className="mt-3 w-full rounded-md border border-zinc-800 py-2 text-sm text-zinc-400 hover:border-emerald-500 hover:text-zinc-200"
+              >
+                {showAllSplits
+                  ? "Show fewer"
+                  : `Show all ${splits.length} splits`}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -902,13 +916,9 @@ function App() {
     <main className="min-h-screen px-4 py-10">
       <div className="mx-auto max-w-3xl">
         <h1 className="text-3xl font-bold tracking-tight">GradePace</h1>
-        <p className="mt-3 text-lg text-zinc-200">
-          Most pace planners assume you run every hill. You don't — on real
-          trails, steep climbs are power-hikes.
-        </p>
-        <p className="mt-2 text-sm text-zinc-400">
-          GradePace turns a course GPX into a grade-adjusted plan: per-km
-          paces, hike splits, and a projected finish.
+        <p className="mt-2 text-zinc-300">
+          Most pace planners assume you run every hill. You don't — GradePace
+          plans the power-hikes too, from your course GPX.
         </p>
         <div className="mt-6">
           <GpxUpload />

@@ -246,6 +246,20 @@
   imperial, else metric; persisted in localStorage (guarded — storage can
   throw in private browsing). `switch-units` analytics event.
 
+- **Declutter pass (owner feedback: too much text on the main page).** Header
+  pitch cut to ONE sentence; upload/privacy hint merged to one line; example
+  badge text shortened; pace-field hint shortened; calibration card is now a
+  collapsed `<details>` (summary shows "· applied ×N" once calibrated); share
+  section reduced to one input+button row (no label, no explainer); range
+  explainer shortened; splits table collapsed to 12 rows with a
+  "Show all N splits" toggle. No behavior changes — copy and layout only.
+- **Gradient-colored elevation profile** (was on Next — unblocked by the
+  resample). The chart stroke is a horizontal SVG gradient with ~150 stops
+  colored by local grade over a ±100 m window (metric profile, before unit
+  conversion): blues = descent, emerald = runnable, amber/orange = climb,
+  rose = hike-steep (≈ the 18% gate). Tooltip now shows elevation · grade.
+  Area fill stays the subtle emerald fade.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay
