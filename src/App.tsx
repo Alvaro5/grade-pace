@@ -21,28 +21,42 @@ import {
 } from "./lib/pacing";
 import { fmtClock, fmtClockShort, fmtPace } from "./lib/format";
 import { GRADE_LEGEND } from "./lib/gradeColor";
+import { MESSAGES, initialLang, type Lang, type Messages } from "./lib/i18n";
 // Aliased: `track` is taken by the parsed-GPX state variable in GpxUpload.
 import { track as trackEvent } from "./lib/analytics";
 import { buildShareCardSvg, type ShareCardData } from "./lib/shareCard";
 import { svgToPng } from "./lib/rasterize";
 
-// Friendly, distinct copy for each parse failure. Anything unrecognized falls
-// through to a generic line rather than crashing the upload path.
-const GPX_ERROR_MESSAGE: Record<GpxErrorCode, string> = {
-  invalid:
-    "This file isn't valid GPX — it couldn't be read as XML. Make sure you exported a .gpx file.",
-  "no-track":
-    "This file has no track or route points — there's nothing to pace in it.",
-  "too-few":
-    "This track has too few points to build a pacing plan (it needs at least two).",
-  "no-elevation":
-    "This file has no elevation data, so the plan can't be grade-adjusted. Re-export the GPX with elevation included — most route planners have that option.",
-};
+// Friendly, distinct copy for each parse failure, in the active language.
+function gpxErrorMsg(t: Messages, code: GpxErrorCode): string {
+  return {
+    invalid: t.errInvalid,
+    "no-track": t.errNoTrack,
+    "too-few": t.errTooFew,
+    "no-elevation": t.errNoElevation,
+  }[code];
+}
 
 // Elevation-processing length scales (see STATUS.md / the research notes).
 const RESAMPLE_INTERVAL_M = 10; // even spacing that kills Δdist gradient spikes
 const SMOOTH_WINDOW_M = 30; // physical low-pass; keep ≥ ~3× the resample interval
 const D_PLUS_THRESHOLD_M = 5; // hysteresis deadband for D+ (noise floor; 0 = naive sum)
+
+// Uncalibrated default terrain factor. ×1.04 is the MEDIAN measured across
+// the project's four calibrated real runs (owner decision, 2026-07: pure
+// Minetti at ×1.00 flatters everyone; the measured median is the honest
+// cold-start default). Calibrating replaces it with a personal value.
+const DEFAULT_TERRAIN_FACTOR = 1.04;
+
+// The bundled demo courses. Imperial is the auto-loaded default (the owner's
+// race); 25 Bosses is the steep showcase — 42% of its distance is >12% grade,
+// so the power-hike planning actually shows. Both are course geometry only
+// (no timestamps), served from public/ and fetched lazily.
+const EXAMPLES = {
+  imperial: { file: "example-imperial-trail.gpx", title: "Imperial Trail" },
+  bosses: { file: "example-25-bosses.gpx", title: "25 Bosses" },
+} as const;
+type ExampleKey = keyof typeof EXAMPLES;
 
 // One processed calibration run. The geometry (dists/grades) is kept so the
 // factor can be RE-DERIVED from the current effort inputs on every render —
@@ -259,19 +273,23 @@ function SliderField({
   );
 }
 
-function GpxUpload() {
+function GpxUpload({ t, lang }: { t: Messages; lang: Lang }) {
   const [track, setTrack] = useState<Track | null>(null);
   const [error, setError] = useState<string | null>(null);
   // A shared-plan link overrides the defaults for every effort input below.
   const [hashPlan] = useState(readPlanFromHash);
-  const [units, setUnits] = useState<Units>(() => hashPlan.units ?? initialUnits());
+  const [units, setUnits] = useState<Units>(
+    () => hashPlan.units ?? initialUnits(),
+  );
   // A sensible easy default in the active unit (6:00/km ≈ 9:39/mi).
   const [paceText, setPaceText] = useState(
     hashPlan.pace ?? (units === "imperial" ? "9:40" : "6:00"),
   );
   const [vam, setVam] = useState(hashPlan.vam ?? 750);
   const [hikeAbovePct, setHikeAbovePct] = useState(hashPlan.gate ?? 18);
-  const [terrainFactor, setTerrainFactor] = useState(hashPlan.tf ?? 1.0);
+  const [terrainFactor, setTerrainFactor] = useState(
+    hashPlan.tf ?? DEFAULT_TERRAIN_FACTOR,
+  );
   // Course name shown on the shareable image; prefilled on load, editable.
   const [title, setTitle] = useState("");
   const [sharing, setSharing] = useState(false);
@@ -280,6 +298,18 @@ function GpxUpload() {
   // ends near the stats instead of scrolling forever.
   const [showAllSplits, setShowAllSplits] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Fullscreen chart overlay — the inline profile is deliberately compact,
+  // this is the "let me actually study the course" view.
+  const [chartZoom, setChartZoom] = useState(false);
+
+  useEffect(() => {
+    if (!chartZoom) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setChartZoom(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chartZoom]);
 
   // Share the current effort settings as a URL (see readPlanFromHash for
   // what travels and what deliberately doesn't).
@@ -301,15 +331,12 @@ function GpxUpload() {
       // Clipboard can be blocked (permissions, non-secure context). Put the
       // hash in the address bar so the user can copy it from there.
       window.location.hash = params.toString();
-      setShareError(
-        "Couldn't copy automatically — the link is in your address bar now.",
-      );
+      setShareError(t.copyFallback);
     }
   }
-  // True while the dashboard shows the bundled course (auto-loaded or clicked),
-  // so we can badge it as an example rather than let it pass for the visitor's
-  // own race. Cleared the moment a user upload succeeds.
-  const [fromExample, setFromExample] = useState(false);
+  // Which bundled example the dashboard currently shows (null = user upload),
+  // so it's badged honestly and the example switcher hides the active one.
+  const [exampleShown, setExampleShown] = useState<ExampleKey | null>(null);
   const [calibRuns, setCalibRuns] = useState<CalibRun[]>([]);
   const [calibError, setCalibError] = useState<string | null>(null);
   const calibId = useRef(0);
@@ -435,9 +462,7 @@ function GpxUpload() {
           const movingSec = movingTimeSec(points);
           if (movingSec === null || movingSec === 0) {
             trackEvent("calibrate-error", { code: "no-time" });
-            return {
-              err: `${file.name}: no timestamps — it looks like a planned route. Export the recorded activity (Strava, Garmin, COROS…) instead.`,
-            };
+            return { err: t.calibNoTime(file.name) };
           }
           const resampled = resampleEven(
             points,
@@ -450,7 +475,7 @@ function GpxUpload() {
             dists,
           );
           const elapsedSec = actualSegmentTimes(points)!.reduce(
-            (sum, t) => sum + t,
+            (sum, t2) => sum + t2,
             0,
           );
           const run: CalibRun = {
@@ -469,11 +494,10 @@ function GpxUpload() {
             code: err instanceof GpxError ? err.code : "other",
           });
           return {
-            err: `${file.name}: ${
+            err:
               err instanceof GpxError
-                ? GPX_ERROR_MESSAGE[err.code]
-                : "couldn't read this file."
-            }`,
+                ? `${file.name}: ${gpxErrorMsg(t, err.code)}`
+                : t.calibUnreadable(file.name),
           };
         }
       }),
@@ -489,27 +513,30 @@ function GpxUpload() {
   }
 
   // Run any GPX text through the pipeline and reflect the result (or a friendly
-  // error) in state. Shared by file upload and the bundled example so both take
-  // the exact same path. `genericMsg` is the fallback for non-GpxError failures.
-  // `source` labels the analytics events three ways — the first-visit auto-load
-  // fires for every visitor, so merging it with the example *click* would drown
-  // the intent signal. On auto failure we also stay silent (no error banner):
-  // the visitor did nothing, so they shouldn't see a failure they can't explain —
-  // they just get the normal empty state.
+  // error) in state. Shared by file upload and the bundled examples so all take
+  // the exact same path. `source` labels the analytics events three ways — the
+  // first-visit auto-load fires for every visitor, so merging it with the
+  // example *click* would drown the intent signal. On auto failure we also stay
+  // silent (no error banner): the visitor did nothing, so they shouldn't see a
+  // failure they can't explain — they just get the normal empty state.
   function loadGpx(
     textPromise: Promise<string>,
     genericMsg: string,
     source: "upload" | "example" | "auto",
+    exampleKey: ExampleKey | null,
   ) {
     setError(null);
     textPromise
       .then((text) => {
         setTrack(buildTrack(text));
-        setFromExample(source !== "upload");
+        setExampleShown(exampleKey);
         trackEvent(
-          { upload: "upload-gpx", example: "load-example", auto: "auto-example" }[
-            source
-          ],
+          {
+            upload: "upload-gpx",
+            example: "load-example",
+            auto: "auto-example",
+          }[source],
+          exampleKey ? { course: exampleKey } : undefined,
         );
       })
       .catch((err) => {
@@ -518,7 +545,7 @@ function GpxUpload() {
         setTrack(null);
         if (source !== "auto") {
           setError(
-            err instanceof GpxError ? GPX_ERROR_MESSAGE[err.code] : genericMsg,
+            err instanceof GpxError ? gpxErrorMsg(t, err.code) : genericMsg,
           );
         }
         // The error code tells us WHICH failure users actually hit in the wild
@@ -535,11 +562,7 @@ function GpxUpload() {
   // Shared by the file input and drag-and-drop — one path for user uploads.
   function loadUserFile(file: File) {
     setTitle(titleFromFilename(file.name));
-    loadGpx(
-      file.text(),
-      "Couldn't read this file. Please try a different GPX.",
-      "upload",
-    );
+    loadGpx(file.text(), t.errGeneric, "upload", null);
   }
 
   function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
@@ -552,26 +575,25 @@ function GpxUpload() {
     const file = event.dataTransfer.files?.[0];
     if (!file) return;
     if (!/\.gpx$/i.test(file.name)) {
-      setError("That doesn't look like a .gpx file — drop a GPX export.");
+      setError(t.errNotGpx);
       return;
     }
     loadUserFile(file);
   }
 
-  // Fetch the bundled course. The GPX is fetched (not import-bundled) so it
+  // Fetch a bundled course. The GPX is fetched (not import-bundled) so it
   // never weighs on the JS bundle; BASE_URL keeps the path correct under any
   // Vite base/deploy subpath.
-  function loadExample(source: "example" | "auto" = "example") {
-    setTitle("Imperial Trail");
+  function loadExample(key: ExampleKey, source: "example" | "auto" = "example") {
+    setTitle(EXAMPLES[key].title);
     loadGpx(
-      fetch(`${import.meta.env.BASE_URL}example-imperial-trail.gpx`).then(
-        (res) => {
-          if (!res.ok) throw new Error(`example fetch failed: ${res.status}`);
-          return res.text();
-        },
-      ),
-      "Couldn't load the example course. Please try again.",
+      fetch(`${import.meta.env.BASE_URL}${EXAMPLES[key].file}`).then((res) => {
+        if (!res.ok) throw new Error(`example fetch failed: ${res.status}`);
+        return res.text();
+      }),
+      t.errExample,
       source,
+      key,
     );
   }
 
@@ -583,7 +605,7 @@ function GpxUpload() {
   useEffect(() => {
     if (autoLoaded.current) return;
     autoLoaded.current = true;
-    loadExample("auto");
+    loadExample("imperial", "auto");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
   }, []);
 
@@ -624,7 +646,7 @@ function GpxUpload() {
     try {
       const totalKm = track.distanceKm;
       const data: ShareCardData = {
-        title: title.trim() || "Race plan",
+        title: title.trim() || t.racePlan,
         distanceKm: track.distanceKm,
         gainM: track.gainM,
         timeSec,
@@ -644,7 +666,7 @@ function GpxUpload() {
       const shareData = {
         files: [file],
         title: `${data.title} — GradePace`,
-        text: `My ${data.title} race plan — built with GradePace`,
+        text: t.shareText(data.title),
       };
       if (navigator.canShare?.(shareData)) {
         // Fires only if share() resolves — dismissing the sheet throws
@@ -664,12 +686,33 @@ function GpxUpload() {
       // The user dismissing the native share sheet is not an error.
       if (!(err instanceof DOMException && err.name === "AbortError")) {
         console.error(err);
-        setShareError("Couldn't create the share image. Please try again.");
+        setShareError(t.shareFailed);
       }
     } finally {
       setSharing(false);
     }
   }
+
+  const legendLabel: Record<string, string> = {
+    descent: t.legendDescent,
+    runnable: t.legendRunnable,
+    climb: t.legendClimb,
+    "power-hike": t.legendPowerHike,
+  };
+  const chartLegend = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+      {GRADE_LEGEND.map((g) => (
+        <span key={g.label} className="flex items-center gap-1.5">
+          <span
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ background: g.color }}
+          />
+          {legendLabel[g.label]}
+        </span>
+      ))}
+    </div>
+  );
+  const chartLabels = { elevation: t.elevationWord, powerHike: t.powerHikeWord };
 
   return (
     // The whole section is a drop target: dragging a GPX anywhere onto the
@@ -680,24 +723,25 @@ function GpxUpload() {
           type="file"
           accept=".gpx"
           onChange={handleFile}
-          aria-label="Upload a course GPX file"
+          aria-label={t.uploadCourseAria}
           className="block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-emerald-500"
         />
-        {/* Pointless while the example is already on screen; reappears after a
-            user upload as the way back. */}
-        {!(track && fromExample) && (
-          <button
-            type="button"
-            onClick={() => loadExample()}
-            className="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white"
-          >
-            Back to the example
-          </button>
-        )}
+        {/* Example switcher: offer whichever bundled course isn't on screen.
+            Imperial is the owner's race; 25 Bosses is the steep showcase. */}
+        {(Object.keys(EXAMPLES) as ExampleKey[])
+          .filter((key) => exampleShown !== key)
+          .map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => loadExample(key)}
+              className="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white"
+            >
+              {key === "imperial" ? t.loadImperial : t.loadBosses}
+            </button>
+          ))}
       </div>
-      <p className="mt-2 text-xs text-zinc-500">
-        Or drop a .gpx anywhere — parsed in your browser, never uploaded.
-      </p>
+      <p className="mt-2 text-xs text-zinc-500">{t.dropHint}</p>
 
       {error && (
         <div
@@ -710,43 +754,52 @@ function GpxUpload() {
 
       {track && (
         <div className="mt-8 space-y-6">
-          {fromExample && (
+          {exampleShown && (
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-300">
-                Example
+                {t.exampleBadge}
               </span>
               <span className="text-zinc-400">
-                Imperial Trail, Fontainebleau (70k) — upload yours to plan
-                your race.
+                {exampleShown === "imperial"
+                  ? t.exampleImperial
+                  : t.exampleBosses}
               </span>
             </div>
           )}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Your pace
+                {t.yourPace}
               </h2>
-              <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs">
-                {(["metric", "imperial"] as const).map((u) => (
-                  <button
-                    key={u}
-                    type="button"
-                    onClick={() => switchUnits(u)}
-                    className={`px-2.5 py-1 font-medium ${
-                      units === u
-                        ? "bg-emerald-600 text-white"
-                        : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    {u === "metric" ? "km" : "mi"}
-                  </button>
-                ))}
+              {/* Units: labeled + aria-pressed so the switch reads as a
+                  setting, not two mystery chips. */}
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <span className="uppercase tracking-wider">{t.unitsLabel}</span>
+                <div className="flex overflow-hidden rounded-md border border-zinc-700">
+                  {(["metric", "imperial"] as const).map((u) => (
+                    <button
+                      key={u}
+                      type="button"
+                      onClick={() => switchUnits(u)}
+                      aria-pressed={units === u}
+                      className={`px-3 py-1.5 text-sm font-medium ${
+                        units === u
+                          ? "bg-emerald-600 text-white"
+                          : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      {u === "metric" ? "km" : "mi"}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="mt-3">
               <Field
-                label="Your easy flat-road pace"
-                hint={`min/${units === "imperial" ? "mile" : "km"}, a pace you could hold for hours on flat ground`}
+                label={t.paceLabel}
+                hint={
+                  units === "imperial" ? t.paceHintImperial : t.paceHintMetric
+                }
               >
                 <input
                   value={paceText}
@@ -756,9 +809,10 @@ function GpxUpload() {
                 />
                 {!paceValid && (
                   <span className="text-xs text-rose-400">
-                    Enter a pace like {units === "imperial" ? "9:40" : "6:30"}{" "}
-                    — still using {fmtPace(effectivePaceSec)}/
-                    {units === "imperial" ? "mi" : "km"}.
+                    {t.paceInvalid(
+                      units === "imperial" ? "9:40" : "6:30",
+                      `${fmtPace(effectivePaceSec)}/${units === "imperial" ? "mi" : "km"}`,
+                    )}
                   </span>
                 )}
               </Field>
@@ -768,12 +822,14 @@ function GpxUpload() {
                 Native <details> keeps it collapsed on load with no extra state. */}
             <details className="mt-4 border-t border-zinc-800 pt-3">
               <summary className="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200">
-                Advanced settings
+                {t.advanced}
               </summary>
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-4">
                 <SliderField
-                  label="Uphill hiking speed"
-                  hint={`how fast you climb when power-hiking, in vertical ${units === "imperial" ? "feet" : "metres"} per hour`}
+                  label={t.vamLabel}
+                  hint={
+                    units === "imperial" ? t.vamHintImperial : t.vamHintMetric
+                  }
                   display={
                     units === "imperial"
                       ? `${Math.round(vam * FT_PER_M)} ft/h`
@@ -786,8 +842,8 @@ function GpxUpload() {
                   onChange={setVam}
                 />
                 <SliderField
-                  label="Switch to hiking when steeper than"
-                  hint="above this steepness, the plan walks instead of runs"
+                  label={t.gateLabel}
+                  hint={t.gateHint}
                   display={`${hikeAbovePct}%`}
                   value={hikeAbovePct}
                   min={5}
@@ -796,8 +852,8 @@ function GpxUpload() {
                   onChange={setHikeAbovePct}
                 />
                 <SliderField
-                  label="Terrain slowdown"
-                  hint="extra time for technical or rough ground (×1.00 = none; below = faster than the model). Best measured, not guessed — see “Calibrate from a real run”."
+                  label={t.terrainLabel}
+                  hint={t.terrainHint}
                   display={`×${terrainFactor.toFixed(2)}`}
                   value={terrainFactor}
                   min={0.8}
@@ -812,32 +868,26 @@ function GpxUpload() {
             </details>
           </div>
 
-          {/* Self-calibration: measure the terrain factor from a recorded run
+          {/* Self-calibration: measure the terrain factor from recorded runs
               instead of guessing the slider. Collapsed by default — it's a
               power feature and the expanded paragraph was landing-page
               clutter for first-time visitors. */}
           <details className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200">
-              Calibrate from a real run
+              {t.calibTitle}
               <span className="ml-2 font-normal normal-case tracking-normal text-zinc-500">
                 {calibrated
-                  ? `· applied ×${terrainFactor.toFixed(2)}`
-                  : "· measure your terrain factor"}
+                  ? t.calibApplied(terrainFactor.toFixed(2))
+                  : t.calibMeasure}
               </span>
             </summary>
-            <p className="mt-3 text-sm text-zinc-400">
-              Upload one or more runs you{" "}
-              <span className="text-zinc-200">recorded</span> (with
-              timestamps). We compare each against the model — stops filtered
-              out — and measure your personal terrain factor. One run is one
-              day; several runs make the measurement steady.
-            </p>
+            <p className="mt-3 text-sm text-zinc-400">{t.calibIntro}</p>
             <input
               type="file"
               accept=".gpx"
               multiple
               onChange={handleCalibFiles}
-              aria-label="Upload recorded run GPX files for calibration"
+              aria-label={t.calibUploadAria}
               className="mt-3 block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-600 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-zinc-200 hover:file:border-emerald-500"
             />
             {calibError && (
@@ -860,15 +910,15 @@ function GpxUpload() {
                     </span>
                     {run.dateMs !== null && (
                       <span className="text-zinc-500">
-                        {new Date(run.dateMs).toLocaleDateString(undefined, {
-                          year: "numeric",
-                          month: "short",
-                        })}
+                        {new Date(run.dateMs).toLocaleDateString(
+                          lang === "fr" ? "fr-FR" : "en-US",
+                          { year: "numeric", month: "short" },
+                        )}
                       </span>
                     )}
                     <span className="text-zinc-500">
-                      {distStr(run.dists[run.dists.length - 1] / 1000)} ·
-                      moving {fmtClock(run.movingSec)}
+                      {distStr(run.dists[run.dists.length - 1] / 1000)} ·{" "}
+                      {t.moving} {fmtClock(run.movingSec)}
                     </span>
                     <span
                       className={`ml-auto font-semibold tabular-nums ${
@@ -884,7 +934,7 @@ function GpxUpload() {
                           prev.filter((r) => r.id !== run.id),
                         )
                       }
-                      aria-label={`Remove ${run.fileName}`}
+                      aria-label={t.removeRun(run.fileName)}
                       className="text-zinc-500 hover:text-zinc-200"
                     >
                       ✕
@@ -895,9 +945,7 @@ function GpxUpload() {
                         from the median. */}
                     {!plausible && (
                       <span className="w-full text-xs text-amber-300">
-                        implausible — excluded from the median. Route export
-                        with estimated timestamps? Flat pace far off for that
-                        day?
+                        {t.implausible}
                       </span>
                     )}
                   </div>
@@ -909,16 +957,17 @@ function GpxUpload() {
                       onClick={applyCalibration}
                       className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
                     >
-                      Use ×
-                      {Math.min(1.6, Math.max(0.8, medianFactor)).toFixed(2)}
+                      {t.useFactor(
+                        Math.min(1.6, Math.max(0.8, medianFactor)).toFixed(2),
+                      )}
                       {plausibleFactors.length > 1
-                        ? ` (median of ${plausibleFactors.length} runs)`
-                        : " for this plan"}
+                        ? t.medianOfRuns(plausibleFactors.length)
+                        : t.forThisPlan}
                     </button>
                     {plausibleFactors.length > 1 && (
                       <span className="text-xs tabular-nums text-zinc-500">
-                        spread ×{Math.min(...plausibleFactors).toFixed(2)} – ×
-                        {Math.max(...plausibleFactors).toFixed(2)}
+                        {t.spread} ×{Math.min(...plausibleFactors).toFixed(2)} –
+                        ×{Math.max(...plausibleFactors).toFixed(2)}
                       </span>
                     )}
                   </div>
@@ -930,80 +979,114 @@ function GpxUpload() {
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             {/* Fixed-height fallback so the layout doesn't jump when the
                 chart chunk arrives. */}
-            <Suspense fallback={<div className="h-40" />}>
+            <Suspense fallback={<div className="h-72" />}>
               <ElevationChart
                 profile={track.profile}
                 units={units}
                 hikeAboveGrade={hikeAbovePct / 100}
+                height={288}
+                labels={chartLabels}
               />
             </Suspense>
-            {/* Names the colors — "power-hike" appears right where you look
-                for it, on the profile itself. */}
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
-              {GRADE_LEGEND.map((g) => (
-                <span key={g.label} className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block h-2 w-2 rounded-full"
-                    style={{ background: g.color }}
-                  />
-                  {g.label}
-                </span>
-              ))}
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              {/* Names the colors — "power-hike" appears right where you look
+                  for it, on the profile itself. */}
+              {chartLegend}
+              <button
+                type="button"
+                onClick={() => setChartZoom(true)}
+                className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:border-emerald-500 hover:text-white"
+              >
+                ⤢ {t.expandChart}
+              </button>
             </div>
           </div>
 
+          {/* Fullscreen course-study view. Backdrop click or Escape closes. */}
+          {chartZoom && (
+            <div
+              className="fixed inset-0 z-50 flex flex-col gap-3 bg-zinc-950/95 p-4 sm:p-8"
+              onClick={() => setChartZoom(false)}
+            >
+              <div
+                className="flex items-center justify-between"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 className="text-lg font-semibold">
+                  {title || EXAMPLES.imperial.title}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setChartZoom(false)}
+                  className="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white"
+                >
+                  ✕ {t.closeChart}
+                </button>
+              </div>
+              <div
+                className="min-h-0 flex-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ElevationChart
+                  profile={track.profile}
+                  units={units}
+                  hikeAboveGrade={hikeAbovePct / 100}
+                  height="100%"
+                  labels={chartLabels}
+                />
+              </div>
+              <div onClick={(e) => e.stopPropagation()}>{chartLegend}</div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Distance" value={distStr(track.distanceKm)} />
-            <StatCard label="Elevation gain" value={gainStr(track.gainM)} />
+            <StatCard label={t.statDistance} value={distStr(track.distanceKm)} />
+            <StatCard label={t.statGain} value={gainStr(track.gainM)} />
             {/* The header's promise, quantified: how much of this course the
                 plan walks instead of pretending you'll run it. */}
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
               <div className="text-xs uppercase tracking-wider text-zinc-400">
-                Power-hike
+                {t.statHike}
               </div>
               <div className="mt-1 text-2xl font-semibold tabular-nums">
                 {distStr(hikeMeters / 1000)}
               </div>
               <div className="mt-0.5 text-sm tabular-nums text-zinc-400">
-                {hikePct < 10 ? hikePct.toFixed(1) : hikePct.toFixed(0)}% of
-                the course walked
+                {t.walkedPct(
+                  hikePct < 10 ? hikePct.toFixed(1) : hikePct.toFixed(0),
+                )}
               </div>
             </div>
             {/* The range IS the product thesis: a to-the-second finish would
                 be false precision. Center = the model's central estimate. */}
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
               <div className="text-xs uppercase tracking-wider text-zinc-400">
-                Projected finish
+                {t.statFinish}
               </div>
               <div className="mt-1 text-2xl font-semibold tabular-nums">
                 {fmtClock(timeSec)}
               </div>
               <div className="mt-0.5 text-sm tabular-nums text-zinc-400">
-                expect {fmtClockShort(range.lowSec)} –{" "}
+                {t.expect} {fmtClockShort(range.lowSec)} –{" "}
                 {fmtClockShort(range.highSec)}
                 {calibrated && (
-                  <span className="text-emerald-400"> · calibrated</span>
+                  <span className="text-emerald-400"> {t.calibratedTag}</span>
                 )}
               </div>
             </div>
           </div>
-          <p className="text-xs text-zinc-500">
-            A range, not a promise — day-of conditions swing a long race by
-            20–40 min. Calibrating narrows it.
-          </p>
+          <p className="text-xs text-zinc-500">{t.rangeNote}</p>
 
-          {/* Share/export: render the plan to a branded PNG. The course name
-              feeds the image title; siteUrl is taken at runtime so the
-              watermark is correct on any domain. */}
           {/* Compact one-row share bar — the button label says what it does,
-              so no explainer paragraph. */}
+              so no explainer paragraph. siteUrl is taken at runtime so the
+              watermark is correct on any domain. */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
             <div className="flex flex-wrap items-center gap-3">
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Course name"
-                aria-label="Course name for the share image"
+                placeholder={t.courseNamePlaceholder}
+                aria-label={t.courseNameAria}
                 className="min-w-[12rem] flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
               />
               <button
@@ -1012,14 +1095,14 @@ function GpxUpload() {
                 disabled={sharing}
                 className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {sharing ? "Creating image…" : "Share image"}
+                {sharing ? t.creatingImage : t.shareImage}
               </button>
               <button
                 type="button"
                 onClick={handleCopyLink}
                 className="rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white"
               >
-                {linkCopied ? "Copied ✓" : "Copy link"}
+                {linkCopied ? t.copied : t.copyLink}
               </button>
             </div>
             {shareError && (
@@ -1042,11 +1125,19 @@ function GpxUpload() {
                   <th className="py-2 pr-4 text-left font-medium">
                     {units === "imperial" ? "mi" : "km"}
                   </th>
-                  <th className="py-2 pr-4 text-right font-medium">grade</th>
-                  <th className="py-2 pr-4 text-right font-medium">D+</th>
-                  <th className="py-2 pr-4 text-right font-medium">hike</th>
-                  <th className="py-2 pr-4 text-right font-medium">pace</th>
-                  <th className="py-2 text-right font-medium">elapsed</th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    {t.thGrade}
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    {t.thDplus}
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    {t.thHike}
+                  </th>
+                  <th className="py-2 pr-4 text-right font-medium">
+                    {t.thPace}
+                  </th>
+                  <th className="py-2 text-right font-medium">{t.thElapsed}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1094,9 +1185,7 @@ function GpxUpload() {
                 onClick={() => setShowAllSplits((v) => !v)}
                 className="mt-3 w-full rounded-md border border-zinc-800 py-2 text-sm text-zinc-400 hover:border-emerald-500 hover:text-zinc-200"
               >
-                {showAllSplits
-                  ? "Show fewer"
-                  : `Show all ${splits.length} splits`}
+                {showAllSplits ? t.showFewer : t.showAll(splits.length)}
               </button>
             )}
           </div>
@@ -1107,20 +1196,57 @@ function GpxUpload() {
 }
 
 function App() {
+  const [lang, setLang] = useState<Lang>(initialLang);
+  const t = MESSAGES[lang];
+
+  // Keep the document language honest for screen readers / translators.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  function switchLang(next: Lang) {
+    if (next === lang) return;
+    setLang(next);
+    try {
+      localStorage.setItem("gp-lang", next);
+    } catch {
+      /* storage unavailable — the toggle still works for this session */
+    }
+    trackEvent("switch-lang", { to: next });
+  }
+
   return (
     <main className="min-h-screen px-4 py-10">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="text-3xl font-bold tracking-tight">GradePace</h1>
-        <p className="mt-2 text-zinc-300">
-          Most pace planners assume you run every hill. You don't — GradePace
-          plans the power-hikes too, from your course GPX.
-        </p>
+      {/* max-w-5xl: the previous 3xl column read as a narrow stripe on large
+          desktop screens (owner feedback from a 27" 1440p display). */}
+      <div className="mx-auto max-w-5xl">
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-3xl font-bold tracking-tight">GradePace</h1>
+          <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs">
+            {(["en", "fr"] as const).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => switchLang(l)}
+                aria-pressed={lang === l}
+                className={`px-2.5 py-1 font-medium uppercase ${
+                  lang === l
+                    ? "bg-zinc-700 text-white"
+                    : "bg-zinc-900 text-zinc-500 hover:text-zinc-200"
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="mt-2 text-zinc-300">{t.tagline}</p>
         <div className="mt-6">
-          <GpxUpload />
+          <GpxUpload t={t} lang={lang} />
         </div>
         <footer className="mt-14 border-t border-zinc-800 pt-6 text-sm text-zinc-500">
           <p>
-            Built by{" "}
+            {t.footerBuiltBy}{" "}
             <a
               href="https://x.com/AlvaroSerero"
               target="_blank"
@@ -1130,7 +1256,7 @@ function App() {
             >
               Alvaro Serero
             </a>{" "}
-            while training for the Imperial Trail 70k, Fontainebleau —{" "}
+            {t.footerTraining}{" "}
             <a
               href="https://github.com/Alvaro5/trail-app"
               target="_blank"
@@ -1138,7 +1264,7 @@ function App() {
               data-umami-event="click-github"
               className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400"
             >
-              open source on GitHub
+              {t.footerOpenSource}
             </a>
             .
           </p>

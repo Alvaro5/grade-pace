@@ -313,6 +313,32 @@
   mean previously flagged as the open cold-start-default question.
   `calibrate-apply` event now carries the run count.
 
+- **Owner-directed batch (2026-07-19):**
+  1. *Steep showcase course:* `public/example-25-bosses.gpx` — the owner's own
+     25 Bosses recording, timestamps + sensor extensions stripped (geometry
+     only, nothing personal; cleanest possible rights). 15.16 km / ~808 m D+,
+     42% of distance >12% grade — the power-hike showcase. Example switcher
+     buttons offer whichever bundled course isn't on screen; badge + analytics
+     carry the course key.
+  2. *Uncalibrated default terrain factor ×1.00 → ×1.04* (owner decision).
+     ×1.04 is the measured MEDIAN across the four calibrated real runs — the
+     cold-start default is now data, not a blind 1.0. Moves the uncalibrated
+     headline (example: 7:17:59 → ~7:36). og.png regenerated to match.
+  3. *Layout for big screens:* container max-w-3xl → max-w-5xl (was a narrow
+     stripe on a 27" 1440p), inline chart 160 → 288 px tall, plus a
+     fullscreen chart overlay ("Expand"/"Agrandir": backdrop/Escape closes,
+     full-height profile + legend) for studying a course.
+  4. *Units switch clarified:* labeled "Units/Unités", bigger targets,
+     aria-pressed.
+  5. *i18n EN/FR:* all UI strings in `src/lib/i18n.ts` (typed off the English
+     table so the languages can't drift; interpolations are functions).
+     Default from navigator.language (fr→FR), persisted (`gp-lang`), EN|FR
+     toggle in the header, `<html lang>` kept in sync, run-list dates
+     localized. Share-card image deliberately stays English (single brand
+     surface). `switch-lang` analytics event.
+  - Light-theme toggle: NOT in this batch (dark-only today); queued as its
+    own pass — touches every color class.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

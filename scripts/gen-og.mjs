@@ -35,7 +35,8 @@ const {
 const { buildShareCardSvg } = await import("../src/lib/shareCard.ts");
 
 // Mirror App.tsx's pipeline and defaults exactly (10 m resample, 30 m smooth,
-// 5 m D+ threshold, 6:00/km, VAM 750, gate 18%, terrain ×1.00, uncalibrated).
+// 5 m D+ threshold, 6:00/km, VAM 750, gate 18%, terrain ×1.04 — the measured
+// default — uncalibrated range).
 const points = parseGpx(
   readFileSync(join(pub, "example-imperial-trail.gpx"), "utf8"),
 );
@@ -43,7 +44,7 @@ const resampled = resampleEven(points, cumulativeDistances(points), 10);
 const dists = resampled.dists;
 const smoothed = smoothElevationByDistance(resampled.points, dists, 30);
 const grades = gradients(smoothed, dists);
-const splits = computeSplits(dists, grades, 360, 750, 0.18, 1);
+const splits = computeSplits(dists, grades, 360, 750, 0.18, 1.04);
 const timeSec = splits[splits.length - 1].elapsedSec;
 const totalKm = dists[dists.length - 1] / 1000;
 const range = finishRange(timeSec, false);

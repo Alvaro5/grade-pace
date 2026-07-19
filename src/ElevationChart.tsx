@@ -18,12 +18,18 @@ export default function ElevationChart({
   profile,
   units = "metric",
   hikeAboveGrade = 0.18,
+  height = 160,
+  labels = { elevation: "elevation", powerHike: "power-hike" },
 }: {
   profile: { km: number; ele: number }[];
   units?: "metric" | "imperial";
   // The plan's run→hike transition grade. Rose on the chart means "the plan
   // walks here", so it must track the actual setting, not a fixed steepness.
   hikeAboveGrade?: number;
+  // Number of px, or "100%" to fill a sized parent (the fullscreen view).
+  height?: number | `${number}%`;
+  // Tooltip words, provided by the caller so the chart follows the app language.
+  labels?: { elevation: string; powerHike: string };
 }) {
   const imperial = units === "imperial";
   const eleUnit = imperial ? "ft" : "m";
@@ -84,7 +90,7 @@ export default function ElevationChart({
   }
 
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
         <defs>
           <linearGradient id="ele" x1="0" y1="0" x2="0" y2="1">
@@ -131,8 +137,8 @@ export default function ElevationChart({
             const g = p?.grade ?? 0;
             const pct = `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
             return [
-              `${Math.round(Number(v))} ${eleUnit} · ${pct}${p?.hike ? " · power-hike" : ""}`,
-              "elevation",
+              `${Math.round(Number(v))} ${eleUnit} · ${pct}${p?.hike ? ` · ${labels.powerHike}` : ""}`,
+              labels.elevation,
             ];
           }}
           labelFormatter={(v) => `${distUnit} ${Number(v).toFixed(1)}`}
