@@ -10,6 +10,9 @@ export type NutritionRates = {
   carbsGPerH: number; // grams of carbohydrate per hour
   fluidMlPerH: number; // millilitres of fluid per hour
   sodiumMgPerH: number; // mg of ELEMENTAL sodium per hour (not salt mass)
+  // Optional: 0/omitted = feature off. Guidance caps total intake around
+  // 3-6 mg/kg per event; the UI hints to weight it toward the back half.
+  caffeineMgPerH?: number;
 };
 
 // Defaults sit mid-band of the published guidance: carbs 60–90 g/h for
@@ -36,6 +39,7 @@ export type NutritionLeg = {
   kcal: number;
   fluidMl: number;
   sodiumMg: number;
+  caffeineMg: number;
 };
 
 export type NutritionTotals = {
@@ -44,6 +48,7 @@ export type NutritionTotals = {
   kcal: number;
   fluidMl: number;
   sodiumMg: number;
+  caffeineMg: number;
 };
 
 export type NutritionPlan = {
@@ -68,6 +73,7 @@ export function computeNutrition(
     kcal: 0,
     fluidMl: 0,
     sodiumMg: 0,
+    caffeineMg: 0,
   };
   if (!(finishSec > 0)) return { legs: [], totals: zero, gels: 0 };
 
@@ -88,6 +94,7 @@ export function computeNutrition(
       kcal: carbsG * KCAL_PER_G_CARB,
       fluidMl: rates.fluidMlPerH * h,
       sodiumMg: rates.sodiumMgPerH * h,
+      caffeineMg: (rates.caffeineMgPerH ?? 0) * h,
     };
   };
 

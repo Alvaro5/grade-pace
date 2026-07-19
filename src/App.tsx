@@ -265,6 +265,7 @@ type HashPlan = {
   nc?: number;
   nfl?: number;
   ns?: number;
+  ncf?: number; // caffeine mg/h, only when enabled
   // Race logistics: minutes per aid station, start time "HH:MM", cutoffs as
   // elapsed "H:MM" list (unit-free, so no imperial conversion like `rav`).
   dw?: number;
@@ -286,6 +287,7 @@ const FLUID_MIN = 250,
   FLUID_MAX = 1000;
 const SODIUM_MIN = 300,
   SODIUM_MAX = 1200;
+const CAFFEINE_MAX = 100;
 
 function readPlanFromHash(): HashPlan {
   try {
@@ -316,6 +318,8 @@ function readPlanFromHash(): HashPlan {
     if (nfl >= FLUID_MIN && nfl <= FLUID_MAX) plan.nfl = Math.round(nfl);
     const ns = Number(p.get("ns"));
     if (ns >= SODIUM_MIN && ns <= SODIUM_MAX) plan.ns = Math.round(ns);
+    const ncf = Number(p.get("ncf"));
+    if (ncf > 0 && ncf <= CAFFEINE_MAX) plan.ncf = Math.round(ncf);
     const dw = Number(p.get("dw"));
     if (p.get("dw") !== null && dw >= 0 && dw <= DWELL_MAX_MIN)
       plan.dw = Math.round(dw);
@@ -502,6 +506,7 @@ function GpxUpload({
       hashPlan.nfl ?? savedPlan?.fluidMlPerH ?? DEFAULT_RATES.fluidMlPerH,
     sodiumMgPerH:
       hashPlan.ns ?? savedPlan?.sodiumMgPerH ?? DEFAULT_RATES.sodiumMgPerH,
+    caffeineMgPerH: hashPlan.ncf ?? savedPlan?.caffeineMgPerH ?? 0,
   });
   // Race logistics: minutes per station, optional start time (wall-clock
   // display) and per-station cutoff barriers (elapsed H:MM, course order).
@@ -652,6 +657,8 @@ function GpxUpload({
       params.set("nfl", String(nutriRates.fluidMlPerH));
     if (nutriRates.sodiumMgPerH !== DEFAULT_RATES.sodiumMgPerH)
       params.set("ns", String(nutriRates.sodiumMgPerH));
+    if ((nutriRates.caffeineMgPerH ?? 0) > 0)
+      params.set("ncf", String(nutriRates.caffeineMgPerH));
     // Logistics: dwell when customized, start when valid, cutoffs only when
     // stations exist AND every token is valid (a partial list would shift
     // the station↔cutoff pairing for the recipient).
@@ -1045,6 +1052,7 @@ function GpxUpload({
         carbsGPerH: nutriRates.carbsGPerH,
         fluidMlPerH: nutriRates.fluidMlPerH,
         sodiumMgPerH: nutriRates.sodiumMgPerH,
+        caffeineMgPerH: nutriRates.caffeineMgPerH ?? 0,
       });
     }, 500);
     return () => clearTimeout(timer);
@@ -1147,6 +1155,37 @@ function GpxUpload({
     list.push(i + 1);
     aidByBucket.set(idx, list);
   });
+
+  // Pace sensitivity: what ±15/±30 s on the flat pace buys on THIS course.
+  // Memoized: four extra computeSplits are cheap, but not per-keystroke-cheap.
+  const sensitivity = useMemo(() => {
+    if (!track) return [];
+    const engineFactor = units === "imperial" ? 1 / KM_PER_MI : 1;
+    return [-30, -15, 15, 30].map((deltaDisplay) => {
+      const displaySec = effectivePaceSec + deltaDisplay;
+      const s = computeSplits(
+        track.distances,
+        track.grades,
+        displaySec * engineFactor,
+        Math.max(1, vam),
+        hikeAbovePct / 100,
+        terrainFactor,
+        bucketMeters,
+      );
+      return {
+        paceLabel: `${fmtPace(displaySec)}/${units === "imperial" ? "mi" : "km"}`,
+        movingSec: s.length ? s[s.length - 1].elapsedSec : 0,
+      };
+    });
+  }, [
+    track,
+    effectivePaceSec,
+    units,
+    vam,
+    hikeAbovePct,
+    terrainFactor,
+    bucketMeters,
+  ]);
 
   // Dwell-adjusted logistics. The engine and calibration stay on MOVING time
   // (dwell threading through computeSplits would mis-calibrate every fit, and
@@ -1335,6 +1374,7 @@ function GpxUpload({
             t.colCarbs,
             t.colFluid,
             t.colSodium,
+            ...((nutriRates.caffeineMgPerH ?? 0) > 0 ? [t.colCaffeine] : []),
             t.colKcal,
           ],
           rows: nutrition.legs.map((leg, i) => [
@@ -1343,6 +1383,9 @@ function GpxUpload({
             carbsStr(leg.carbsG),
             fluidStr(leg.fluidMl),
             sodiumStr(leg.sodiumMg),
+            ...((nutriRates.caffeineMgPerH ?? 0) > 0
+              ? [`${Math.round(leg.caffeineMg)} mg`]
+              : []),
             String(Math.round(leg.kcal)),
           ]),
           totalRow:
@@ -1353,6 +1396,9 @@ function GpxUpload({
                   carbsStr(nutrition.totals.carbsG),
                   fluidStr(nutrition.totals.fluidMl),
                   sodiumStr(nutrition.totals.sodiumMg),
+                  ...((nutriRates.caffeineMgPerH ?? 0) > 0
+                    ? [`${Math.round(nutrition.totals.caffeineMg)} mg`]
+                    : []),
                   String(Math.round(nutrition.totals.kcal)),
                 ]
               : undefined,
@@ -2161,6 +2207,21 @@ function GpxUpload({
             </div>
           </div>
           <p className="text-xs text-zinc-500">{t.rangeNote}</p>
+          {/* What a different flat pace buys on THIS course: the question
+              every runner actually asks. Same dwell applies to all variants. */}
+          {sensitivity.length > 0 && (
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-zinc-500">
+              <span>{t.sensitivityLabel}</span>
+              {sensitivity.map((v) => (
+                <span key={v.paceLabel}>
+                  {v.paceLabel}{" "}
+                  <span className="text-zinc-300 light:text-zinc-700">
+                    {fmtClockShort(v.movingSec + totalDwellSec)}
+                  </span>
+                </span>
+              ))}
+            </p>
+          )}
 
           {/* Compact one-row share bar — the button label says what it does,
               so no explainer paragraph. siteUrl is taken at runtime so the
@@ -2278,6 +2339,22 @@ function GpxUpload({
                     setNutriRates((r) => ({ ...r, sodiumMgPerH: n }))
                   }
                 />
+                <SliderField
+                  label={t.caffeineLabel}
+                  hint={t.caffeineHint}
+                  display={
+                    (nutriRates.caffeineMgPerH ?? 0) > 0
+                      ? `${nutriRates.caffeineMgPerH} mg/h`
+                      : "0"
+                  }
+                  value={nutriRates.caffeineMgPerH ?? 0}
+                  min={0}
+                  max={CAFFEINE_MAX}
+                  step={10}
+                  onChange={(n) =>
+                    setNutriRates((r) => ({ ...r, caffeineMgPerH: n }))
+                  }
+                />
               </div>
               <div className="-mx-4 mt-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
                 <table className="w-full min-w-[30rem] border-collapse text-sm">
@@ -2298,6 +2375,11 @@ function GpxUpload({
                       <th className="py-2 pr-4 text-right font-medium">
                         {t.colSodium}
                       </th>
+                      {(nutriRates.caffeineMgPerH ?? 0) > 0 && (
+                        <th className="py-2 pr-4 text-right font-medium">
+                          {t.colCaffeine}
+                        </th>
+                      )}
                       <th className="py-2 text-right font-medium">
                         {t.colKcal}
                       </th>
@@ -2327,6 +2409,11 @@ function GpxUpload({
                         <td className="py-1.5 pr-4 text-right">
                           {sodiumStr(leg.sodiumMg)}
                         </td>
+                        {(nutriRates.caffeineMgPerH ?? 0) > 0 && (
+                          <td className="py-1.5 pr-4 text-right">
+                            {Math.round(leg.caffeineMg)} mg
+                          </td>
+                        )}
                         <td className="py-1.5 text-right">
                           {Math.round(leg.kcal)}
                         </td>
@@ -2349,6 +2436,11 @@ function GpxUpload({
                         <td className="py-2 pr-4 text-right">
                           {sodiumStr(nutrition.totals.sodiumMg)}
                         </td>
+                        {(nutriRates.caffeineMgPerH ?? 0) > 0 && (
+                          <td className="py-2 pr-4 text-right">
+                            {Math.round(nutrition.totals.caffeineMg)} mg
+                          </td>
+                        )}
                         <td className="py-2 text-right">
                           {Math.round(nutrition.totals.kcal)}
                         </td>

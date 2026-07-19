@@ -83,6 +83,7 @@ const en = {
   calibratedTag: "· calibrated",
   rangeNote:
     "A range, not a promise: day-of conditions swing a long race by 20–40 min. Calibrating narrows it.",
+  sensitivityLabel: "With a different flat pace:",
   courseNamePlaceholder: "Course name",
   courseNameAria: "Course name for the share image",
   shareImage: "Share image",
@@ -158,6 +159,10 @@ const en = {
   sodiumLabel: "Sodium",
   sodiumHint:
     "mg of sodium per hour (1 g of salt ≈ 390 mg sodium). Salty sweaters need more",
+  caffeineLabel: "Caffeine",
+  caffeineHint:
+    "mg per hour, 0 = off. Save it for the back half; keep the event total moderate (3 to 6 mg per kg)",
+  colCaffeine: "caffeine",
   legLabel: "segment",
   colDuration: "time",
   colCarbs: "carbs",
@@ -268,6 +273,7 @@ const fr: Messages = {
   calibratedTag: "· calibré",
   rangeNote:
     "Une fourchette, pas une promesse : les conditions du jour font varier une longue course de 20 à 40 min. Calibrer la resserre.",
+  sensitivityLabel: "Avec une autre allure de base :",
   courseNamePlaceholder: "Nom du parcours",
   courseNameAria: "Nom du parcours pour l'image partagée",
   shareImage: "Partager l'image",
@@ -345,6 +351,10 @@ const fr: Messages = {
   sodiumLabel: "Sodium",
   sodiumHint:
     "mg de sodium par heure (1 g de sel ≈ 390 mg de sodium). Transpiration salée = besoins plus élevés",
+  caffeineLabel: "Caféine",
+  caffeineHint:
+    "mg par heure, 0 = désactivé. Gardez-la pour la seconde moitié ; total modéré sur l'épreuve (3 à 6 mg par kg)",
+  colCaffeine: "caféine",
   legLabel: "tronçon",
   colDuration: "durée",
   colCarbs: "glucides",
