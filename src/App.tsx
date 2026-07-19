@@ -757,7 +757,8 @@ function GpxUpload({
 
   // Display helpers for the active unit — data underneath stays metric.
   // Thousands separators follow the UI language (1,193 ft / 1 193 ft).
-  const numLocale = lang === "fr" ? "fr-FR" : "en-US";
+  const numLocale =
+    lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US";
   const distStr = (km: number) =>
     units === "imperial"
       ? `${(km / KM_PER_MI).toFixed(2)} mi`
@@ -1789,7 +1790,7 @@ function GpxUpload({
                     {run.dateMs !== null && (
                       <span className="text-zinc-500">
                         {new Date(run.dateMs).toLocaleDateString(
-                          lang === "fr" ? "fr-FR" : "en-US",
+                          lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US",
                           { year: "numeric", month: "short" },
                         )}
                       </span>
@@ -2634,7 +2635,7 @@ function App() {
               {theme === "dark" ? <SunIcon /> : <MoonIcon />}
             </button>
             <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs light:border-zinc-300">
-              {(["en", "fr"] as const).map((l) => (
+              {(["en", "fr", "es"] as const).map((l) => (
                 <button
                   key={l}
                   type="button"
@@ -2656,6 +2657,33 @@ function App() {
         <div className="mt-6">
           <GpxUpload t={t} lang={lang} theme={theme} />
         </div>
+        {/* Why-trust-this, collapsed: the methodology is a selling point for
+            skeptics but landing-page noise for everyone else. */}
+        <details className="mt-10 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 light:border-zinc-200 light:bg-white">
+          <summary className="flex cursor-pointer flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-500 light:hover:text-zinc-800">
+            <ChevronIcon className="chev h-3.5 w-3.5" />
+            {t.howTitle}
+            <span className="ml-1 font-normal normal-case tracking-normal text-zinc-500">
+              {t.howSubtitle}
+            </span>
+          </summary>
+          <div className="mt-3 space-y-3 text-sm text-zinc-400 light:text-zinc-600">
+            <p>{t.howModel}</p>
+            <p>{t.howCalib}</p>
+            <p>{t.howRange}</p>
+            <p>
+              <a
+                href="https://github.com/Alvaro5/grade-pace"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-umami-event="click-methodology"
+                className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400 light:text-zinc-700 light:decoration-zinc-400 light:hover:text-emerald-700"
+              >
+                {t.howMore}
+              </a>
+            </p>
+          </div>
+        </details>
         <footer className="mt-14 border-t border-zinc-800 pt-6 text-sm text-zinc-500 light:border-zinc-200">
           <p>
             {t.footerBuiltBy}{" "}

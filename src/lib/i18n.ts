@@ -7,16 +7,19 @@
 // colons, commas or parentheses instead. En dashes stay ONLY inside numeric
 // ranges ("60–90 g/h", "7:00 – 8:15") where they are standard typography.
 
-export type Lang = "en" | "fr";
+export type Lang = "en" | "fr" | "es";
 
 export function initialLang(): Lang {
   try {
     const saved = localStorage.getItem("gp-lang");
-    if (saved === "en" || saved === "fr") return saved;
+    if (saved === "en" || saved === "fr" || saved === "es") return saved;
   } catch {
     /* storage unavailable — fall through to the locale default */
   }
-  return navigator.language?.toLowerCase().startsWith("fr") ? "fr" : "en";
+  const nav = navigator.language?.toLowerCase() ?? "";
+  if (nav.startsWith("fr")) return "fr";
+  if (nav.startsWith("es")) return "es";
+  return "en";
 }
 
 const en = {
@@ -204,6 +207,15 @@ const en = {
   savedNote:
     "Your plan is stored on this device and restored on your next visit.",
   savedForget: "Forget this plan",
+  howTitle: "How it works",
+  howSubtitle: "· the model behind the plan",
+  howModel:
+    "Pace comes from physics, not vibes: the Minetti energy-cost curve (lab-measured) prices every grade, anchored by your easy flat pace. Above the hiking gate the plan switches to power-hiking at your vertical speed, because past that steepness running stops being the efficient option.",
+  howCalib:
+    "The terrain factor is measured, not guessed: upload a recorded run and GradePace inverts its own model against it, stops filtered out. Several runs make the measurement steady.",
+  howRange:
+    "The finish is a range on purpose. Day-of conditions (sleep, heat, fueling) swing a long race by 20 to 40 minutes; a to-the-second prediction would be theater. Calibrating narrows the band.",
+  howMore: "Full methodology and source on GitHub",
 };
 
 export type Messages = typeof en;
@@ -399,6 +411,215 @@ const fr: Messages = {
   savedNote:
     "Votre plan est conservé sur cet appareil et restauré à votre prochaine visite.",
   savedForget: "Oublier ce plan",
+  howTitle: "Comment ça marche",
+  howSubtitle: "· le modèle derrière le plan",
+  howModel:
+    "L'allure vient de la physique, pas du doigt mouillé : la courbe de coût énergétique de Minetti (mesurée en laboratoire) donne le prix de chaque pente, ancré par votre allure facile sur plat. Au-delà du seuil de marche, le plan passe en marche rapide à votre vitesse ascensionnelle, car courir n'y est plus l'option efficace.",
+  howCalib:
+    "Le facteur terrain est mesuré, pas deviné : importez une sortie enregistrée et GradePace inverse son propre modèle dessus, arrêts filtrés. Plusieurs sorties stabilisent la mesure.",
+  howRange:
+    "L'arrivée est une fourchette, volontairement. Les conditions du jour (sommeil, chaleur, alimentation) font varier une longue course de 20 à 40 minutes ; une prédiction à la seconde serait du théâtre. Calibrer resserre la fourchette.",
+  howMore: "Méthodologie complète et code source sur GitHub",
 };
 
-export const MESSAGES: Record<Lang, Messages> = { en, fr };
+const es: Messages = {
+  tagline:
+    "La mayoría de las herramientas de ritmo asumen que corres cada cuesta. En realidad, no. GradePace también planifica los tramos andando, a partir del GPX de tu recorrido.",
+  dropHint:
+    "O suelta un .gpx en cualquier parte. Se analiza en tu navegador, nunca se sube.",
+  uploadCourseAria: "Subir un archivo GPX del recorrido",
+  exampleBadge: "Ejemplo",
+  exampleImperial:
+    "Imperial Trail, Fontainebleau (70 km). Sube el tuyo para planificar tu carrera.",
+  exampleBosses:
+    "25 Bosses, Fontainebleau: 15 km de muros de arenisca, el escaparate de la marcha rápida.",
+  loadImperial: "Imperial Trail (70 km)",
+  loadBosses: "25 Bosses (empinado)",
+  yourPace: "Tu ritmo",
+  unitsLabel: "Unidades",
+  paceLabel: "Tu ritmo cómodo en llano",
+  paceHintMetric: "min/km, un ritmo sostenible durante horas en llano",
+  paceHintImperial: "min/milla, un ritmo sostenible durante horas en llano",
+  paceInvalid: (example: string, current: string) =>
+    `Introduce un ritmo como ${example}. Seguimos usando ${current}.`,
+  advanced: "Ajustes avanzados",
+  vamLabel: "Velocidad de ascenso andando",
+  vamHintMetric:
+    "velocidad de ascenso en marcha rápida, en metros verticales por hora",
+  vamHintImperial:
+    "velocidad de ascenso en marcha rápida, en pies verticales por hora",
+  gateLabel: "Andar por encima de",
+  gateHint: "por encima de esta pendiente, el plan anda en lugar de correr",
+  terrainLabel: "Penalización de terreno",
+  terrainHint:
+    "tiempo extra por terreno técnico (por defecto ×1,04, medido en salidas reales). Lo ideal: mídelo tú mismo, ver “Calibrar con una salida real”.",
+  calibTitle: "Calibrar con una salida real",
+  calibMeasure: "· mide tu factor de terreno",
+  calibApplied: (factor: string) => `· aplicado ×${factor}`,
+  calibIntro:
+    "Sube una o varias salidas grabadas (con marcas de tiempo). Cada una se compara con el modelo, filtrando las paradas, para medir tu factor de terreno personal. Una salida = un día; varias salidas estabilizan la medición.",
+  calibUploadAria: "Subir salidas grabadas (GPX) para calibrar",
+  calibNoTime: (file: string) =>
+    `${file}: sin marcas de tiempo, parece una ruta planificada. Exporta la actividad grabada (Strava, Garmin, COROS…).`,
+  calibUnreadable: (file: string) => `${file}: no se pudo leer el archivo.`,
+  moving: "en movimiento",
+  implausible:
+    "inverosímil, excluido de la mediana. ¿Ruta con tiempos estimados? ¿Ritmo de referencia muy distinto ese día?",
+  removeRun: (file: string) => `Quitar ${file}`,
+  useFactor: (factor: string) => `Usar ×${factor}`,
+  medianOfRuns: (n: number) => ` (mediana de ${n} salidas)`,
+  forThisPlan: " para este plan",
+  spread: "rango",
+  expandChart: "Ampliar",
+  closeChart: "Cerrar",
+  legendDescent: "bajada",
+  legendRunnable: "corrible",
+  legendClimb: "subida",
+  legendPowerHike: "marcha rápida",
+  elevationWord: "altitud",
+  powerHikeWord: "marcha",
+  statDistance: "Distancia",
+  statGain: "Desnivel positivo",
+  statHike: "Marcha rápida",
+  statFinish: "Llegada estimada",
+  walkedPct: (pct: string) => `${pct}% del recorrido andando`,
+  expect: "cuenta con",
+  calibratedTag: "· calibrado",
+  rangeNote:
+    "Una horquilla, no una promesa: las condiciones del día mueven una carrera larga entre 20 y 40 min. Calibrar la estrecha.",
+  sensitivityLabel: "Con otro ritmo base:",
+  courseNamePlaceholder: "Nombre del recorrido",
+  courseNameAria: "Nombre del recorrido para la imagen compartida",
+  shareImage: "Compartir imagen",
+  creatingImage: "Creando…",
+  copyLink: "Copiar enlace",
+  copied: "Copiado",
+  shareText: (title: string) =>
+    `Mi plan de carrera ${title}, creado con GradePace`,
+  shareFailed: "No se pudo crear la imagen. Inténtalo de nuevo.",
+  copyFallback:
+    "No se pudo copiar automáticamente. El enlace está en la barra de direcciones.",
+  racePlan: "Plan de carrera",
+  thGrade: "pendiente",
+  thDplus: "D+",
+  thHike: "marcha",
+  thPace: "ritmo",
+  thElapsed: "acumulado",
+  showAll: (n: number) => `Mostrar los ${n} tramos`,
+  showFewer: "Mostrar menos",
+  errInvalid:
+    "Este archivo no es un GPX válido: no se pudo leer como XML. Comprueba que exportaste un archivo .gpx.",
+  errNoTrack:
+    "Este archivo no contiene ni track ni ruta: no hay nada que planificar.",
+  errTooFew:
+    "Este track tiene muy pocos puntos para construir un plan (hacen falta al menos dos).",
+  errNoElevation:
+    "Este archivo no tiene datos de altitud, imposible ajustar por pendiente. Re-exporta el GPX con altitud; la mayoría de las herramientas lo permiten.",
+  errGeneric: "No se pudo leer este archivo. Prueba con otro GPX.",
+  errExample: "No se pudo cargar el recorrido de ejemplo. Inténtalo de nuevo.",
+  errNotGpx: "Esto no parece un archivo .gpx. Suelta una exportación GPX.",
+  footerBuiltBy: "Creado por",
+  footerTraining: "mientras entrena para el Imperial Trail 70k, Fontainebleau.",
+  footerOpenSource: "Código abierto en GitHub",
+  themeToLight: "Cambiar a modo claro",
+  themeToDark: "Cambiar a modo oscuro",
+  uploadCourse: "Subir GPX",
+  calibAdd: "Añadir salidas",
+  aidLabel: "Avituallamientos",
+  aidPlaceholder: "ej. 17, 33, 47",
+  mapStart: "Salida",
+  mapFinish: "Meta",
+  mapAria: "Mapa del recorrido",
+  mapLayersAria: "Estilo de mapa",
+  mapLocate: "Mostrar mi posición",
+  mapLocateError:
+    "Posición no disponible. Permite el acceso a la ubicación y reinténtalo.",
+  mapLayerTerrain: "Terreno",
+  mapLayerStandard: "Estándar",
+  mapLayerSatellite: "Satélite",
+  mapLayerHybrid: "Híbrido",
+  mapPoiToggle: "Puntos de interés",
+  mapPoiHint:
+    "Agua, aseos, miradores, cafés y más desde OpenStreetMap. Solo se envía la zona del recorrido (un rectángulo), nunca tu track.",
+  mapPoiLoading: "Cargando…",
+  mapPoiError:
+    "No se pudieron cargar los puntos de interés. Reactiva para reintentar.",
+  mapPoiTooBig: "Zona del recorrido demasiado grande para puntos de interés.",
+  mapPoiEmpty: "Ningún punto de interés cartografiado cerca de este recorrido.",
+  poiWater: "agua potable",
+  poiToilets: "aseos",
+  poiViewpoint: "mirador",
+  poiCafe: "café",
+  poiSpring: "manantial",
+  poiShelter: "refugio",
+  poiParking: "aparcamiento",
+  poiPicnic: "zona de pícnic",
+  nutritionTitle: "Plan de nutrición",
+  nutritionSubtitle: "· carbohidratos, líquidos, sodio por tramo",
+  nutritionIntro:
+    "Objetivos por hora aplicados a cada tramo del plan (un tramo es la sección entre dos avituallamientos): esto es lo que llevar y consumir en cada uno. Las cantidades siguen el tiempo previsto, no la distancia.",
+  nutritionNoStations:
+    "Añade tus avituallamientos en el campo bajo el perfil y esta tabla se divide en una fila por tramo entre avituallamientos, cada una con sus cantidades.",
+  carbsLabel: "Carbohidratos",
+  carbsHint:
+    "g por hora. 60–90 g/h es el rango de ultra; por encima de 90 hace falta un estómago entrenado",
+  fluidLabel: "Líquidos",
+  fluidHint: "ml por hora. Más con calor, menos con frío",
+  sodiumLabel: "Sodio",
+  sodiumHint:
+    "mg de sodio por hora (1 g de sal ≈ 390 mg de sodio). Sudor salado = más necesidad",
+  caffeineLabel: "Cafeína",
+  caffeineHint:
+    "mg por hora, 0 = desactivado. Resérvala para la segunda mitad; total moderado en la prueba (3 a 6 mg por kg)",
+  colCaffeine: "cafeína",
+  legLabel: "tramo",
+  colDuration: "tiempo",
+  colCarbs: "carbos",
+  colFluid: "líquidos",
+  colSodium: "sodio",
+  colKcal: "kcal",
+  nutritionTotal: "Total",
+  gelsHint: (n: number) =>
+    `≈ ${n} geles en la carrera (25 g de carbohidratos cada uno). Combínalos con bebidas, barritas y comida sólida a tu gusto.`,
+  nutritionDisclaimer:
+    "Pautas generales, no consejo médico. Entrena tu nutrición de carrera en tus tiradas largas.",
+  exportSheet: "Exportar PDF",
+  popupBlocked:
+    "No se pudo abrir la vista de exportación. Permite las ventanas emergentes para este sitio y reinténtalo.",
+  sheetSettings: "Ajustes",
+  sheetEta: "paso",
+  sheetSplitsTitle: "Tabla de ritmo",
+  sheetFooter: (host: string) => `Creado con GradePace · ${host}`,
+  dwellLabel: "Tiempo de parada",
+  dwellHint:
+    "Minutos perdidos en cada avituallamiento (rellenar, comer, cola). Se añaden a todos los tiempos posteriores.",
+  startLabel: "Salida",
+  startInvalid: "Introduce una hora de salida como 8:00 (24 h).",
+  finishClock: (clock: string) => `llegada ≈ ${clock}`,
+  cutoffLabel: "Cortes",
+  cutoffPlaceholder: "ej. 5:30, 8:00",
+  cutoffHint:
+    "tiempos de corte como tiempo de carrera transcurrido (H:MM), uno por avituallamiento en orden del recorrido",
+  cutoffMissLine: (station: string, arr: string, cutoff: string) =>
+    `${station}: llegada prevista ${arr}, después del corte de ${cutoff}.`,
+  cutoffRiskLine: (station: string, cutoff: string) =>
+    `${station}: el extremo lento de tu horquilla supera el corte de ${cutoff}.`,
+  chipArrDep: (arr: string, dep: string) => `llegada ${arr}, salida ${dep}`,
+  sheetDepart: "salida",
+  sheetCutoff: "corte",
+  savedBadge: "Guardado",
+  savedNote:
+    "Tu plan se guarda en este dispositivo y se restaura en tu próxima visita.",
+  savedForget: "Olvidar este plan",
+  howTitle: "Cómo funciona",
+  howSubtitle: "· el modelo detrás del plan",
+  howModel:
+    "El ritmo sale de la física, no de sensaciones: la curva de coste energético de Minetti (medida en laboratorio) pone precio a cada pendiente, anclada por tu ritmo cómodo en llano. Por encima del umbral de marcha, el plan pasa a marcha rápida a tu velocidad vertical, porque a esa pendiente correr deja de ser la opción eficiente.",
+  howCalib:
+    "El factor de terreno se mide, no se adivina: sube una salida grabada y GradePace invierte su propio modelo sobre ella, filtrando las paradas. Varias salidas estabilizan la medición.",
+  howRange:
+    "La llegada es una horquilla a propósito. Las condiciones del día (sueño, calor, alimentación) mueven una carrera larga entre 20 y 40 minutos; una predicción al segundo sería teatro. Calibrar estrecha la horquilla.",
+  howMore: "Metodología completa y código en GitHub",
+};
+
+export const MESSAGES: Record<Lang, Messages> = { en, fr, es };
