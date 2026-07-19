@@ -398,6 +398,16 @@ export function computeSplits(
   return splits;
 }
 
+// Median — the robust central pick for small samples. Used by multi-run
+// calibration: with 2–4 measured factors, one bad day (or one sneaky
+// synthetic-timestamp file) shouldn't drag the applied value like a mean would.
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
 // Uncertainty band for the projected finish, as fractions of the central
 // estimate. A single to-the-second number is false precision — the honest
 // output is a range (see the product thesis):

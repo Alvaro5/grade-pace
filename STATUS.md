@@ -297,6 +297,22 @@
   power-hike stat — so the social preview can't drift from the app.
   `public/og.svg` (the old hand-made design) deleted.
 
+- **Multi-run calibration (closes honest-limitation #2, single-effort
+  overfit).** The calibration card now takes SEVERAL recorded runs (multiple
+  file select, incremental adds, per-run remove). Design upgrade over v1:
+  each run stores its geometry (dists/grades) + fixed moving time, and the
+  factor is RE-DERIVED from the current pace/VAM/gate on every render — fits
+  can never go stale when inputs change (the old staleness caveat is gone).
+  Apply uses the MEDIAN of plausible fits (new `median()` in pacing.ts,
+  tested; robust to one bad file/day), implausible runs stay visible but
+  excluded, and the run list shows date/distance/moving time per fit with
+  the spread printed next to the apply button. Verified live with all four
+  real runs + the synthetic-timestamp route file: ×0.99/×1.01/×1.06/×1.08
+  fitted, route excluded at ×0.43, median ×1.04 applied → Imperial 7:35:59,
+  range 7:13–8:08. Note: the measured median (×1.04) equals the personal
+  mean previously flagged as the open cold-start-default question.
+  `calibrate-apply` event now carries the run count.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

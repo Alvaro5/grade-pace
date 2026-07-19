@@ -11,6 +11,7 @@ import {
   movingTimeSec,
   calibrateTerrainFactor,
   finishRange,
+  median,
   resampleEven,
   smoothElevation,
   smoothElevationByDistance,
@@ -353,6 +354,22 @@ describe("computeSplits bucketMeters", () => {
       km[km.length - 1].elapsedSec,
       6,
     );
+  });
+});
+
+describe("median", () => {
+  it("picks the middle of odd samples, averages the two middles of even", () => {
+    expect(median([1.08, 0.99, 1.01])).toBe(1.01);
+    expect(median([1.08, 0.99, 1.01, 1.06])).toBeCloseTo(1.035, 10);
+  });
+  it("is robust to one wild outlier", () => {
+    expect(median([0.99, 1.01, 1.08, 0.43])).toBeCloseTo(1.0, 10);
+  });
+  it("returns null on empty input and leaves the input unsorted", () => {
+    expect(median([])).toBeNull();
+    const arr = [3, 1, 2];
+    median(arr);
+    expect(arr).toEqual([3, 1, 2]);
   });
 });
 
