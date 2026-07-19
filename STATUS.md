@@ -661,22 +661,35 @@
     (1/2/2.5/5 steps), e2e suite green, visual parity in the browser.
 
 ## Next
-- **Optional elevation polish** (only if it earns its keep): expose
-  `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay
-  smoother (preserves climb peaks better than a box MA — the research flagged it,
-  but it's harder to explain and the box MA is fine for now).
-- Calibration: decide a believable terrain factor for Fontainebleau. New data
-  point: the four real-run fits now span ×0.99 (flat road) to ×1.08 (campagne
-  trails) with stops filtered — Fontainebleau sand/rocks plausibly ~1.05–1.10.
-  Gut-check against the 68.75 km finish (7:17 @1.00 vs ~7:52 @1.08).
-- Calibration next steps: fit against several efforts (weight recent ones) not
-  a lone run; synthetic-timestamp detector (route exports at constant speed).
-- Fatigue-fade model — ONLY after a second calibration point exists (known split
-  or past race time). Do not fit terrain + fatigue against one finish time.
-- Gradient-colored profile chart — now unblocked by the resample (gradients are
-  clean); clamp grade for display.
-- Bundle ~530 kB (Recharts heavy) → code-split the chart if load time matters
-- Polish: pace stepper, hover tooltips on splits, mobile layout
+- **Owner-gated** (explicitly deferred, do not start without a decision):
+  fatigue-fade model (needs a second calibration point; never fit terrain +
+  fatigue against one finish time); recency/similarity weighting for
+  multi-run calibration (domain logic the owner wants to review deliberately);
+  mobile real-device pass; custom domain.
+- Optional elevation polish (only if it earns its keep): expose
+  `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or a Savitzky-Golay
+  smoother (preserves climb peaks better than a box MA, harder to explain).
+- e2e in CI: once PR #2 (CI workflow) merges, add `npm run e2e` as a job
+  (needs `npx playwright install chromium` in the workflow).
+- Ideas parked: per-station dwell overrides; caffeine back-half weighting;
+  fullscreen-map hover sync; more languages (DE/IT).
+
+- **Final autonomy hour (owner: "anything more?").**
+  - *Watch GPX export* (`src/lib/planGpx.ts`, +4 tests): the course as a
+    ≤2000-point track plus start/finish/aid WAYPOINTS whose names carry the
+    plan's ETAs ("R1 · 17.0 km · ETA 1:52 (09:52)"). Round-trip tested
+    through the app's own parser; XML-escaped; "Watch GPX" button in the
+    share bar. The plan now rides on a Garmin/COROS.
+  - *D+ remaining in the chart tooltip*: new `cumulativeGainSeries` in the
+    engine (same 5 m hysteresis as the headline D+, +1 test) feeds
+    "· D+ left 640 m" into the hover, in all three languages. The racing
+    question ("how much climbing is left from here") answered on hover.
+  - *Share card aid ticks*: amber triangles under the profile at each
+    station (only when stations exist; og.png regenerated, unchanged since
+    the example carries none). Visually verified via a rendered card.
+  - *Perf*: the main computeSplits call is memoized (it ran on every
+    unrelated render; with the sensitivity variants that was 5 engine runs
+    per keystroke in the title field).
 
 ## Known issues
 - parseGpx forward-fills missing <ele>; fine for clean files, revisit if the messier

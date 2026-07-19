@@ -19,6 +19,7 @@ import {
   smoothElevationByDistance,
   elevationChange,
   cumulativeGain,
+  cumulativeGainSeries,
   gradients,
   cumulativeDistances,
   type TrackPoint,
@@ -611,6 +612,15 @@ describe("cumulativeGain", () => {
   it("measures re-ascents from the valley (up-down-up)", () => {
     const eles = [0, 50, 0, 50, 0]; // two genuine 50 m climbs
     expect(cumulativeGain(eles, 3)).toBeGreaterThan(100 - 6);
+  });
+
+  it("series matches the scalar at the end and never decreases", () => {
+    const eles = [100, 110, 104, 120, 118, 140, 90, 100, 130];
+    const series = cumulativeGainSeries(eles, 5);
+    expect(series[series.length - 1]).toBe(cumulativeGain(eles, 5));
+    for (let i = 1; i < series.length; i++)
+      expect(series[i]).toBeGreaterThanOrEqual(series[i - 1]);
+    expect(series[0]).toBe(0);
   });
 
   it("returns 0 for degenerate input", () => {

@@ -61,6 +61,7 @@ import {
   type CutoffStatus,
 } from "./lib/logistics";
 import { clearPlan, loadPlan, savePlan } from "./lib/persistence";
+import { buildPlanGpx } from "./lib/planGpx";
 import { MESSAGES, initialLang, type Lang, type Messages } from "./lib/i18n";
 // Aliased: `track` is taken by the parsed-GPX state variable in GpxUpload.
 import { track as trackEvent } from "./lib/analytics";
@@ -77,6 +78,7 @@ import {
   LinkIcon,
   CheckIcon,
   FileIcon,
+  WatchIcon,
   LogoMark,
 } from "./icons";
 
@@ -1083,17 +1085,24 @@ function GpxUpload({
 
   // Derive the plan from the parsed track + the effort inputs, so editing a
   // field recomputes without re-uploading. Cheap enough to run every render.
-  const splits: Split[] = track
-    ? computeSplits(
-        track.distances,
-        track.grades,
-        enginePaceSecPerKm,
-        Math.max(1, vam),
-        hikeAbovePct / 100,
-        terrainFactor,
-        bucketMeters,
-      )
-    : [];
+  // Memoized: recomputing ~7k segments on every unrelated render (typing a
+  // course title, toggling a card) is wasted work, and with the sensitivity
+  // variants there are five of these per plan change.
+  const splits: Split[] = useMemo(
+    () =>
+      track
+        ? computeSplits(
+            track.distances,
+            track.grades,
+            enginePaceSecPerKm,
+            Math.max(1, vam),
+            hikeAbovePct / 100,
+            terrainFactor,
+            bucketMeters,
+          )
+        : [],
+    [track, enginePaceSecPerKm, vam, hikeAbovePct, terrainFactor, bucketMeters],
+  );
   const timeSec = splits.length ? splits[splits.length - 1].elapsedSec : 0;
   // Honest range around the central estimate; calibration narrows the band.
   const range = finishRange(timeSec, calibrated);
@@ -1283,6 +1292,7 @@ function GpxUpload({
         siteUrl: window.location.host,
         units,
         hikeAboveGrade: hikeAbovePct / 100,
+        aidKms,
       };
       const blob = await svgToPng(buildShareCardSvg(data), 1200, 630);
       const file = new File([blob], "gradepace-plan.png", {
@@ -1478,6 +1488,32 @@ function GpxUpload({
     trackEvent("export-sheet");
   }
 
+  // Watch export: the course as a GPX track plus start/finish/aid waypoints
+  // carrying the plan's ETAs, ready for a Garmin/COROS course import.
+  function handleExportGpx() {
+    if (!track) return;
+    const xml = buildPlanGpx({
+      title: title.trim() || t.racePlan,
+      coords: track.coords,
+      eles: track.profile.map((p) => p.ele),
+      aid: adjStops.map((s, i) => ({
+        km: s.km,
+        name: `R${i + 1} · ${distStr(s.km)} · ETA ${fmtClockShort(s.arriveSec)}${clockAt(s.arriveSec) ? ` (${clockAt(s.arriveSec)})` : ""}`,
+      })),
+      startName: `${t.mapStart}${startSec !== null ? ` · ${startText.trim()}` : ""}`,
+      finishName: `${t.mapFinish} · ≈ ${fmtClockShort(adjFinishSec)}`,
+    });
+    const url = URL.createObjectURL(
+      new Blob([xml], { type: "application/gpx+xml" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "gradepace-plan.gpx";
+    a.click();
+    URL.revokeObjectURL(url);
+    trackEvent("export-gpx");
+  }
+
   const legendLabel: Record<string, string> = {
     descent: t.legendDescent,
     runnable: t.legendRunnable,
@@ -1497,7 +1533,11 @@ function GpxUpload({
       ))}
     </div>
   );
-  const chartLabels = { elevation: t.elevationWord, powerHike: t.powerHikeWord };
+  const chartLabels = {
+    elevation: t.elevationWord,
+    powerHike: t.powerHikeWord,
+    dplusLeft: t.chartDplusLeft,
+  };
 
   // Memoized so CourseMap's effects (keyed on these props) don't re-run on
   // every unrelated render of this component.
@@ -2266,6 +2306,14 @@ function GpxUpload({
               >
                 <FileIcon />
                 {t.exportSheet}
+              </button>
+              <button
+                type="button"
+                onClick={handleExportGpx}
+                className={btnSecondaryClass}
+              >
+                <WatchIcon />
+                {t.exportGpx}
               </button>
             </div>
             {shareError && (

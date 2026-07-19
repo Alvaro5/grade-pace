@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { gradeColor } from "./lib/gradeColor";
+import { cumulativeGainSeries } from "./lib/pacing";
 
 // Hand-rolled SVG elevation chart. This replaced Recharts (the app's
 // heaviest chunk, ~100 kB gzip, used for exactly one area chart) with ~300
@@ -29,7 +30,7 @@ export default function ElevationChart({
   units = "metric",
   hikeAboveGrade = 0.18,
   height = 160,
-  labels = { elevation: "elevation", powerHike: "power-hike" },
+  labels = { elevation: "elevation", powerHike: "power-hike", dplusLeft: "D+ left" },
   theme = "dark",
   paceLabelAt,
   aidKms,
@@ -43,7 +44,7 @@ export default function ElevationChart({
   // Number of px, or "100%" to fill a sized parent (the fullscreen view).
   height?: number | `${number}%`;
   // Tooltip words, provided by the caller so the chart follows the app language.
-  labels?: { elevation: string; powerHike: string };
+  labels?: { elevation: string; powerHike: string; dplusLeft: string };
   theme?: "dark" | "light";
   // Plan pace for the split containing a metric km — shown in the tooltip.
   paceLabelAt?: (kmMetric: number) => string | null;
@@ -170,7 +171,28 @@ export default function ElevationChart({
       yTicks.push({ py: y(ele), label: `${Math.round(v)}${eleUnit}` });
     }
 
-    return { totalKm, km0, x, y, line, area, stops, xTicks, yTicks, gradeAt, hikeAt };
+    // Climbing left from any point, consistent with the headline D+ (same
+    // 5 m hysteresis the app-level cumulativeGain uses).
+    const gainSeries = cumulativeGainSeries(
+      profile.map((p) => p.ele),
+      5,
+    );
+    const gainTotal = gainSeries[gainSeries.length - 1] ?? 0;
+    return {
+      totalKm,
+      km0,
+      x,
+      y,
+      line,
+      area,
+      stops,
+      xTicks,
+      yTicks,
+      gradeAt,
+      hikeAt,
+      gainSeries,
+      gainTotal,
+    };
   }, [profile, hikeAboveGrade, imperial, plotW, plotH, eleUnit]);
 
   // ---- Imperative hover machinery: no React state past this line. ----
@@ -225,8 +247,12 @@ export default function ElevationChart({
       const kmStr = (imperial ? p.km / 1.609344 : p.km).toFixed(1);
       const pace = paceLabelAt?.(p.km);
       tip.querySelector("[data-tip-label]")!.textContent = `${distUnit} ${kmStr}`;
+      const leftM = Math.max(0, geom.gainTotal - geom.gainSeries[idx]);
+      const leftStr = imperial
+        ? `${Math.round(leftM * 3.28084)} ft`
+        : `${Math.round(leftM)} m`;
       tip.querySelector("[data-tip-value]")!.textContent =
-        `${eleStr} · ${pct}${pace ? ` · ${pace}` : ""}${geom.hikeAt(idx) ? ` · ${labels.powerHike}` : ""}`;
+        `${eleStr} · ${pct}${pace ? ` · ${pace}` : ""} · ${labels.dplusLeft} ${leftStr}${geom.hikeAt(idx) ? ` · ${labels.powerHike}` : ""}`;
       tip.style.display = "block";
       // Flip sides near the right edge so the tooltip never clips.
       const tipW = tip.offsetWidth;

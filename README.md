@@ -52,7 +52,7 @@ vs. your actual *moving* time → measured terrain factor, one click to apply.
 npm install
 npm run dev      # local dev server
 npm run build    # production build
-npm run test     # engine + app tests (Vitest, 105 tests)
+npm run test     # engine + app tests (Vitest, 119 tests)
 npm run lint
 ```
 
@@ -86,6 +86,8 @@ src/
   lib/persistence.ts   Local save/restore of the last uploaded plan.
   lib/planSheet.ts     Printable race-day plan sheet (stats, profile, aid ETAs,
                        nutrition, full pacing table) for the PDF export.
+  lib/planGpx.ts       Watch-ready GPX export: course track + aid waypoints
+                       named with projected ETAs.
   App.tsx              UI: upload, effort inputs, calibration, share, table.
   ElevationChart.tsx   Grade-colored profile, hand-rolled SVG (lazy chunk).
   CourseMap.tsx        Map with the grade-colored route, aid stations, basemap

@@ -77,6 +77,7 @@ const en = {
   legendPowerHike: "power-hike",
   elevationWord: "elevation",
   powerHikeWord: "power-hike",
+  chartDplusLeft: "D+ left",
   statDistance: "Distance",
   statGain: "Elevation gain",
   statHike: "Power-hike",
@@ -180,6 +181,7 @@ const en = {
   nutritionDisclaimer:
     "General guidance, not medical advice. Train your race nutrition on long outings.",
   exportSheet: "Export PDF",
+  exportGpx: "Watch GPX",
   popupBlocked:
     "Couldn't open the export view. Allow pop-ups for this site and try again.",
   sheetSettings: "Settings",
@@ -278,6 +280,7 @@ const fr: Messages = {
   legendPowerHike: "marche rapide",
   elevationWord: "altitude",
   powerHikeWord: "marche",
+  chartDplusLeft: "D+ restant",
   statDistance: "Distance",
   statGain: "Dénivelé positif",
   statHike: "Marche rapide",
@@ -384,6 +387,7 @@ const fr: Messages = {
   nutritionDisclaimer:
     "Des repères généraux, pas un avis médical. Entraînez votre nutrition de course sur vos sorties longues.",
   exportSheet: "Exporter en PDF",
+  exportGpx: "GPX montre",
   popupBlocked:
     "Impossible d'ouvrir la vue d'export. Autorisez les pop-ups pour ce site et réessayez.",
   sheetSettings: "Réglages",
@@ -478,6 +482,7 @@ const es: Messages = {
   legendPowerHike: "marcha rápida",
   elevationWord: "altitud",
   powerHikeWord: "marcha",
+  chartDplusLeft: "D+ restante",
   statDistance: "Distancia",
   statGain: "Desnivel positivo",
   statHike: "Marcha rápida",
@@ -584,6 +589,7 @@ const es: Messages = {
   nutritionDisclaimer:
     "Pautas generales, no consejo médico. Entrena tu nutrición de carrera en tus tiradas largas.",
   exportSheet: "Exportar PDF",
+  exportGpx: "GPX reloj",
   popupBlocked:
     "No se pudo abrir la vista de exportación. Permite las ventanas emergentes para este sitio y reinténtalo.",
   sheetSettings: "Ajustes",

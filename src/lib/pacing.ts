@@ -266,6 +266,30 @@ export function cumulativeGain(eles: number[], thresholdM: number): number {
   return gain;
 }
 
+// Per-point cumulative D+ with the same hysteresis rules — series[i] is the
+// gain banked by point i, so "climbing left from here" is total − series[i]
+// and stays consistent with the headline D+ (same threshold, same walk).
+export function cumulativeGainSeries(
+  eles: number[],
+  thresholdM: number,
+): number[] {
+  const series = new Array<number>(eles.length).fill(0);
+  if (eles.length < 2) return series;
+  let gain = 0;
+  let ref = eles[0];
+  for (let i = 0; i < eles.length; i++) {
+    const delta = eles[i] - ref;
+    if (delta > thresholdM) {
+      gain += delta;
+      ref = eles[i];
+    } else if (delta < 0) {
+      ref = eles[i];
+    }
+    series[i] = gain;
+  }
+  return series;
+}
+
 export function gradients(points: TrackPoint[], dists: number[]): number[] {
   const grades: number[] = [];
   for (let i = 1; i < points.length; i++) {
