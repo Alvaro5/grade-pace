@@ -387,9 +387,20 @@ function GpxUpload({
   // ends near the stats instead of scrolling forever.
   const [showAllSplits, setShowAllSplits] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  // Fullscreen chart overlay — the inline profile is deliberately compact,
-  // this is the "let me actually study the course" view.
+  // Fullscreen overlays — the inline views are deliberately compact, these
+  // are the "actually study the course" modes.
   const [chartZoom, setChartZoom] = useState(false);
+  const [mapZoom, setMapZoom] = useState(false);
+  // Course position hovered on the profile, mirrored as a dot on the map.
+  // Functional update + 50 m dead-band so pointer-moves don't thrash renders
+  // (React bails out when the value is unchanged).
+  const [hoverKm, setHoverKm] = useState<number | null>(null);
+  const onHoverKm = (km: number | null) =>
+    setHoverKm((prev) => {
+      if (km === null) return null;
+      if (prev !== null && Math.abs(prev - km) < 0.05) return prev;
+      return +km.toFixed(2);
+    });
   // Effort sliders: always visible on desktop (lg), toggled below that.
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // Aid stations ("ravitaillements") as free text in the ACTIVE unit —
@@ -410,13 +421,16 @@ function GpxUpload({
       .filter((n) => Number.isFinite(n) && n > 0);
 
   useEffect(() => {
-    if (!chartZoom) return;
+    if (!chartZoom && !mapZoom) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setChartZoom(false);
+      if (e.key === "Escape") {
+        setChartZoom(false);
+        setMapZoom(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [chartZoom]);
+  }, [chartZoom, mapZoom]);
 
   // Share the current effort settings as a URL (see readPlanFromHash for
   // what travels and what deliberately doesn't).
@@ -1211,7 +1225,7 @@ function GpxUpload({
           {/* Course map: same grade colors as the profile (rose = the plan
               walks), aid stations with their ETAs in tooltips. Lazy chunk —
               Leaflet + tiles load after the page is interactive. */}
-          <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 p-2 light:border-zinc-200 light:bg-white">
+          <div className="relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 p-2 light:border-zinc-200 light:bg-white">
             <Suspense fallback={<div className="h-72" />}>
               <CourseMap
                 coords={track.coords}
@@ -1224,9 +1238,66 @@ function GpxUpload({
                 startLabel={t.mapStart}
                 finishLabel={t.mapFinish}
                 ariaLabel={t.mapAria}
+                hoverKm={hoverKm}
               />
             </Suspense>
+            <button
+              type="button"
+              onClick={() => setMapZoom(true)}
+              className={`absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900/90 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-emerald-500 hover:text-white light:border-zinc-300 light:bg-white/90 light:text-zinc-600 light:hover:text-emerald-700 ${focusRing}`}
+            >
+              <ExpandIcon className="h-3.5 w-3.5" />
+              {t.expandChart}
+            </button>
           </div>
+
+          {/* Fullscreen map, same overlay pattern as the chart (portal to
+              <body>, opaque, Escape/backdrop closes). */}
+          {mapZoom &&
+            createPortal(
+              <div
+                className="animate-fade-in fixed inset-0 z-50 flex flex-col gap-3 bg-zinc-950 p-4 light:bg-zinc-50 sm:p-8"
+                onClick={() => setMapZoom(false)}
+              >
+                <div
+                  className="flex items-center justify-between"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h2 className="text-lg font-semibold">
+                    {title || EXAMPLES.imperial.title}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setMapZoom(false)}
+                    className={btnSecondaryClass}
+                  >
+                    <CloseIcon className="h-4 w-4" />
+                    {t.closeChart}
+                  </button>
+                </div>
+                <div
+                  className="min-h-0 flex-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Suspense fallback={null}>
+                    <CourseMap
+                      coords={track.coords}
+                      grades={track.grades}
+                      hikeAboveGrade={hikeAbovePct / 100}
+                      aid={aidStops.map((s, i) => ({
+                        km: s.km,
+                        label: `R${i + 1} · ${distStr(s.km)} · ≈ ${fmtClockShort(s.eta)}`,
+                      }))}
+                      startLabel={t.mapStart}
+                      finishLabel={t.mapFinish}
+                      ariaLabel={t.mapAria}
+                      heightClass="h-full"
+                    />
+                  </Suspense>
+                </div>
+              </div>,
+              document.body,
+            )}
 
           <div className={cardClass}>
             {/* Fixed-height fallback so the layout doesn't jump when the
@@ -1241,6 +1312,7 @@ function GpxUpload({
                 theme={theme}
                 paceLabelAt={paceLabelAt}
                 aidKms={aidKms}
+                onHoverKm={onHoverKm}
               />
             </Suspense>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">

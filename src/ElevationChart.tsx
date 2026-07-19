@@ -24,6 +24,7 @@ export default function ElevationChart({
   theme = "dark",
   paceLabelAt,
   aidKms,
+  onHoverKm,
 }: {
   profile: { km: number; ele: number }[];
   units?: "metric" | "imperial";
@@ -42,6 +43,9 @@ export default function ElevationChart({
   paceLabelAt?: (kmMetric: number) => string | null;
   // Aid-station positions in metric km — dashed markers labeled R1, R2, …
   aidKms?: number[];
+  // Reports the hovered course position (metric km, null on leave) so the
+  // map can mirror it with a marker.
+  onHoverKm?: (kmMetric: number | null) => void;
 }) {
   const dark = theme === "dark";
   const imperial = units === "imperial";
@@ -68,6 +72,7 @@ export default function ElevationChart({
     const hike = gradeAt(i, 3) >= hikeAboveGrade;
     return {
       km: imperial ? p.km / 1.609344 : p.km,
+      kmMetric: p.km,
       ele: imperial ? p.ele * 3.28084 : p.ele,
       grade: band,
       hike,
@@ -117,7 +122,21 @@ export default function ElevationChart({
 
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+      <AreaChart
+        data={data}
+        margin={{ top: 5, right: 5, bottom: 0, left: 0 }}
+        onMouseMove={(state) => {
+          // Recharts v3 exposes the hovered x-value as `activeLabel` on the
+          // chart-level mouse state (activePayload is tooltip-only now).
+          // The label is in DISPLAY units — convert back to metric km.
+          const label = (state as { activeLabel?: number | string })
+            ?.activeLabel;
+          const v = typeof label === "number" ? label : Number(label);
+          if (onHoverKm && Number.isFinite(v))
+            onHoverKm(imperial ? v * 1.609344 : v);
+        }}
+        onMouseLeave={() => onHoverKm?.(null)}
+      >
         <defs>
           <linearGradient id="ele" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#34d399" stopOpacity={0.35} />

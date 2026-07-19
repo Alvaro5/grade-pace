@@ -440,6 +440,19 @@
   dependency (after Umami) — OpenTopoMap is free/fair-use; swap to a keyed
   provider if traffic ever makes that impolite.
 
+- **Map fullscreen + chart↔map hover sync.**
+  - The map gets the same "Agrandir" treatment as the chart (overlay button
+    on the card, portal-to-body fullscreen, Escape/backdrop closes; the
+    Escape handler now closes whichever overlay is open).
+  - Hovering the elevation profile mirrors the position as an emerald dot on
+    the map — the profile answers "what will I be doing", the map now answers
+    "where is that". Wiring: chart reports metric km via Recharts v3's
+    `activeLabel` (NOT `activePayload` — v3 removed it from the chart-level
+    mouse state; first attempt silently did nothing, caught by DOM
+    inspection); App keeps a hoverKm state with a 50 m dead-band + functional
+    bail-out so pointer-moves don't thrash renders; the map moves ONE
+    reusable non-interactive circleMarker rather than recreating layers.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

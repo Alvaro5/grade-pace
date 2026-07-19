@@ -19,6 +19,8 @@ export default function CourseMap({
   startLabel = "Start",
   finishLabel = "Finish",
   ariaLabel = "Course map",
+  heightClass = "h-72",
+  hoverKm = null,
 }: {
   coords: { lat: number; lon: number }[]; // resampled track, 10 m spacing
   grades: number[]; // per-segment, parallel to coords (length n−1)
@@ -27,11 +29,15 @@ export default function CourseMap({
   startLabel?: string;
   finishLabel?: string;
   ariaLabel?: string;
+  heightClass?: string; // "h-72" inline, "h-full" in the fullscreen view
+  // Course position hovered on the elevation profile — mirrored as a dot.
+  hoverKm?: number | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const routeRef = useRef<L.LayerGroup | null>(null);
   const aidRef = useRef<L.LayerGroup | null>(null);
+  const hoverRef = useRef<L.CircleMarker | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -138,6 +144,35 @@ export default function CourseMap({
     }
   }, [aid, coords]);
 
+  // Hover mirror: one reusable marker, moved rather than recreated — this
+  // updates at pointer-move frequency.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || coords.length < 2) return;
+    if (hoverKm == null) {
+      hoverRef.current?.remove();
+      hoverRef.current = null;
+      return;
+    }
+    const idx = Math.min(
+      coords.length - 1,
+      Math.max(0, Math.round((hoverKm * 1000) / 10)),
+    );
+    const ll: [number, number] = [coords[idx].lat, coords[idx].lon];
+    if (!hoverRef.current) {
+      hoverRef.current = L.circleMarker(ll, {
+        radius: 6,
+        color: "#ffffff",
+        weight: 2,
+        fillColor: "#34d399",
+        fillOpacity: 1,
+        interactive: false,
+      }).addTo(map);
+    } else {
+      hoverRef.current.setLatLng(ll);
+    }
+  }, [hoverKm, coords]);
+
   // `relative z-0` creates a stacking context: Leaflet's internal panes use
   // z-indexes in the hundreds and would otherwise paint OVER the fullscreen
   // chart overlay (z-50).
@@ -146,7 +181,7 @@ export default function CourseMap({
       ref={containerRef}
       role="img"
       aria-label={ariaLabel}
-      className="relative z-0 h-72 w-full rounded-lg"
+      className={`relative z-0 w-full rounded-lg ${heightClass}`}
     />
   );
 }
