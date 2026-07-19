@@ -2,7 +2,7 @@
 
 ## Stack (current)
 - Vite + React + TypeScript
-- Tailwind, Recharts (charting)
+- Tailwind; hand-rolled SVG chart; Leaflet maps
 - Deployed: Vercel (auto-deploy from GitHub main)
 - Pacing model: Minetti grade-adjusted cost
 
@@ -631,6 +631,34 @@
     bundled example GPX files aren't precached (offline serves YOUR plan,
     not the demo). Icons generated from the brand favicon (192/512 + a
     full-bleed maskable) via gen-og.mjs.
+
+- **Roadmap batches 4-9 (owner: "complete everything").**
+  - *Pace sensitivity*: finish at flat pace ±15/±30 s computed on the actual
+    course (memoized computeSplits ×4), one line under the stats.
+  - *Caffeine*: optional mg/h rate (0 = off) in the nutrition lib (+column
+    in the table and PDF when enabled); hash `ncf`, saved-plan field is
+    optional so old saves still load.
+  - *Map*: numbered distance pills every 5 display units (10 past 100) and
+    an on-demand locate-me control (blue dot + accuracy circle; geolocation
+    fires only on click, never leaves the device).
+  - *Spanish*: full typed `es` table (Messages type makes a missing key a
+    compile error), es-ES number formats, browser-language detection, 3-way
+    switcher. Plus a collapsed "How it works" methodology card (EN/FR/ES)
+    above the footer with a GitHub link.
+  - *Error visibility*: window error/unhandledrejection → Umami `app-error`
+    (session-deduped, capped at 5, 120-char truncation).
+  - *Playwright e2e* (`npm run e2e`): three specs against the real preview
+    build with external hosts blocked and Overpass mocked: dashboard
+    renders, Export PDF popup opens with the sheet, POI toggle pins
+    markers. Guards the wiring unit tests mock away.
+  - *Recharts REPLACED with a hand-rolled SVG chart* (~300 lines): the
+    338 kB / 100 kB-gzip chunk became 5.7 kB / 2.6 kB. Same visual contract
+    (two-window grade coloring, RLE gradient stops, padded domain, aid
+    markers, themed grid) and a fully imperative tooltip/cursor (pointer
+    moves mutate DOM through refs; React renders zero times per hover).
+    Recharts uninstalled; its v3 quirks (activeLabel, animation-vs-domain)
+    are gone with it. Verified: tooltip values, hover bridge, tick niceness
+    (1/2/2.5/5 steps), e2e suite green, visual parity in the browser.
 
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose

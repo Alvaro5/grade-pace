@@ -87,7 +87,7 @@ src/
   lib/planSheet.ts     Printable race-day plan sheet (stats, profile, aid ETAs,
                        nutrition, full pacing table) for the PDF export.
   App.tsx              UI: upload, effort inputs, calibration, share, table.
-  ElevationChart.tsx   Grade-colored profile (lazy-loaded Recharts chunk).
+  ElevationChart.tsx   Grade-colored profile, hand-rolled SVG (lazy chunk).
   CourseMap.tsx        Map with the grade-colored route, aid stations, basemap
                        switcher, scale bar, opt-in POI overlay (lazy Leaflet).
   ErrorBoundary.tsx    Styled fallback instead of a white screen.
