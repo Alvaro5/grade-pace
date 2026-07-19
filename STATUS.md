@@ -387,6 +387,17 @@
     primary/secondary buttons.
   - *theme-color meta follows the theme* so mobile browser chrome matches.
 
+- **UI detail pass #3.**
+  - *Effort sliders live on the desktop:* on lg+ the three knobs (VAM, gate,
+    terrain) render as a 3-column grid inside the pace card — that card was
+    mostly empty space, and these ARE the product's controls. Below lg they
+    stay behind the "Advanced settings" toggle (now controlled state with a
+    rotating chevron; native details replaced there).
+  - *Chart tooltip shows the plan's pace* for the split under the cursor
+    (`paceLabelAt` prop: App maps course-km → split pace in active units) —
+    hovering now answers "what will I be doing here", making the chart the
+    actual planning surface. Verified: "317 ft · +2% · 10:27/mi".
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

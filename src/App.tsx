@@ -300,7 +300,7 @@ function SliderField({
   onChange: (n: number) => void;
 }) {
   return (
-    <label className="flex w-56 flex-col gap-1 text-sm">
+    <label className="flex w-full min-w-0 flex-col gap-1 text-sm">
       <span className="flex justify-between text-zinc-300 light:text-zinc-700">
         <span>{label}</span>
         <span className="tabular-nums text-zinc-200 light:text-zinc-800">
@@ -357,6 +357,8 @@ function GpxUpload({
   // Fullscreen chart overlay — the inline profile is deliberately compact,
   // this is the "let me actually study the course" view.
   const [chartZoom, setChartZoom] = useState(false);
+  // Effort sliders: always visible on desktop (lg), toggled below that.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     if (!chartZoom) return;
@@ -694,6 +696,18 @@ function GpxUpload({
       ? (hikeMeters / (track.distanceKm * 1000)) * 100
       : 0;
 
+  // The plan's pace for the split containing a given course km — lets the
+  // chart tooltip answer "what will I be doing HERE", not just "how high is
+  // this point".
+  const paceLabelAt = (kmMetric: number): string | null => {
+    if (!splits.length) return null;
+    const idx = Math.min(
+      Math.floor((kmMetric * 1000) / bucketMeters),
+      splits.length - 1,
+    );
+    return paceStr(splits[idx].paceSecPerKm);
+  };
+
   // Render the current plan to a branded PNG and share it (native share sheet
   // when available, e.g. mobile) or download it. Every shared card carries the
   // GradePace mark + site URL — the growth loop. The card itself is always
@@ -897,14 +911,25 @@ function GpxUpload({
               </Field>
             </div>
 
-            {/* Jargon controls tucked away — the default view needs none of them.
-                Native <details> keeps it collapsed on load with no extra state. */}
-            <details className="mt-4 border-t border-zinc-800 pt-3 light:border-zinc-200">
-              <summary className="flex cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-600 light:hover:text-zinc-900">
-                <ChevronIcon className="chev h-3.5 w-3.5" />
+            {/* Effort sliders: ALWAYS visible on desktop — the card had acres
+                of empty space, and these are the product's actual knobs.
+                Below lg they collapse behind a toggle, since on a phone they
+                are jargon-y noise for a first-time visitor. */}
+            <div className="mt-4 border-t border-zinc-800 pt-3 light:border-zinc-200">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                aria-expanded={advancedOpen}
+                className={`flex items-center gap-1.5 rounded text-sm text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-600 light:hover:text-zinc-900 lg:hidden ${focusRing}`}
+              >
+                <ChevronIcon
+                  className={`h-3.5 w-3.5 transition-transform ${advancedOpen ? "rotate-90" : ""}`}
+                />
                 {t.advanced}
-              </summary>
-              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-4">
+              </button>
+              <div
+                className={`${advancedOpen ? "grid" : "hidden"} mt-3 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid lg:grid-cols-3`}
+              >
                 <SliderField
                   label={t.vamLabel}
                   hint={
@@ -945,7 +970,7 @@ function GpxUpload({
                   }}
                 />
               </div>
-            </details>
+            </div>
           </div>
 
           {/* Self-calibration: measure the terrain factor from recorded runs
@@ -1075,6 +1100,7 @@ function GpxUpload({
                 height={288}
                 labels={chartLabels}
                 theme={theme}
+                paceLabelAt={paceLabelAt}
               />
             </Suspense>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -1132,6 +1158,7 @@ function GpxUpload({
                   height="100%"
                   labels={chartLabels}
                   theme={theme}
+                  paceLabelAt={paceLabelAt}
                 />
               </div>
               <div onClick={(e) => e.stopPropagation()}>{chartLegend}</div>

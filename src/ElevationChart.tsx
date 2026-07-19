@@ -21,6 +21,7 @@ export default function ElevationChart({
   height = 160,
   labels = { elevation: "elevation", powerHike: "power-hike" },
   theme = "dark",
+  paceLabelAt,
 }: {
   profile: { km: number; ele: number }[];
   units?: "metric" | "imperial";
@@ -34,6 +35,9 @@ export default function ElevationChart({
   // SVG attributes can't use Tailwind variants, so the grid/tooltip colors
   // come from a prop instead of CSS.
   theme?: "dark" | "light";
+  // Plan pace for the split containing a metric km — shown in the tooltip so
+  // hovering answers "what will I be doing here".
+  paceLabelAt?: (kmMetric: number) => string | null;
 }) {
   const dark = theme === "dark";
   const imperial = units === "imperial";
@@ -63,6 +67,7 @@ export default function ElevationChart({
       ele: imperial ? p.ele * 3.28084 : p.ele,
       grade: band,
       hike,
+      pace: paceLabelAt?.(p.km) ?? null,
     };
   });
 
@@ -155,11 +160,16 @@ export default function ElevationChart({
           }}
           labelStyle={{ color: dark ? "#a1a1aa" : "#52525b" }}
           formatter={(v, _name, item) => {
-            const p = item?.payload as { grade?: number; hike?: boolean };
+            const p = item?.payload as {
+              grade?: number;
+              hike?: boolean;
+              pace?: string | null;
+            };
             const g = p?.grade ?? 0;
             const pct = `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
+            const pace = p?.pace ? ` · ${p.pace}` : "";
             return [
-              `${Math.round(Number(v))} ${eleUnit} · ${pct}${p?.hike ? ` · ${labels.powerHike}` : ""}`,
+              `${Math.round(Number(v))} ${eleUnit} · ${pct}${pace}${p?.hike ? ` · ${labels.powerHike}` : ""}`,
               labels.elevation,
             ];
           }}
