@@ -115,6 +115,8 @@ const en = {
   footerOpenSource: "open source on GitHub",
   themeToLight: "Switch to light mode",
   themeToDark: "Switch to dark mode",
+  uploadCourse: "Upload GPX",
+  calibAdd: "Add recorded runs",
 };
 
 export type Messages = typeof en;
@@ -221,6 +223,8 @@ const fr: Messages = {
   footerOpenSource: "open source sur GitHub",
   themeToLight: "Passer en mode clair",
   themeToDark: "Passer en mode sombre",
+  uploadCourse: "Importer un GPX",
+  calibAdd: "Ajouter des sorties",
 };
 
 export const MESSAGES: Record<Lang, Messages> = { en, fr };

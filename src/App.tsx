@@ -26,6 +26,15 @@ import { MESSAGES, initialLang, type Lang, type Messages } from "./lib/i18n";
 import { track as trackEvent } from "./lib/analytics";
 import { buildShareCardSvg, type ShareCardData } from "./lib/shareCard";
 import { svgToPng } from "./lib/rasterize";
+import {
+  SunIcon,
+  MoonIcon,
+  UploadIcon,
+  ExpandIcon,
+  CloseIcon,
+  ChevronIcon,
+  LogoMark,
+} from "./icons";
 
 // Friendly, distinct copy for each parse failure, in the active language.
 function gpxErrorMsg(t: Messages, code: GpxErrorCode): string {
@@ -222,13 +231,19 @@ function initialUnits(): Units {
 }
 
 // Shared class fragments — each carries its dark default + light override so
-// the two themes can't drift apart per-instance.
+// the two themes can't drift apart per-instance, plus the same transition +
+// focus treatment so every interactive element feels like one system.
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
 const cardClass =
   "rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 light:border-zinc-200 light:bg-white";
+// The projected-finish card is the hero number — it alone gets the accent.
+const heroCardClass =
+  "rounded-xl border border-emerald-600/40 bg-zinc-900/50 p-4 light:border-emerald-500/40 light:bg-white";
 const inputClass =
-  "w-28 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 tabular-nums focus:border-emerald-500 focus:outline-none light:border-zinc-300 light:bg-white light:text-zinc-900";
-const btnSecondaryClass =
-  "rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-500 hover:text-white light:border-zinc-300 light:bg-white light:text-zinc-700 light:hover:text-emerald-700";
+  "w-28 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-zinc-100 tabular-nums transition-colors focus:border-emerald-500 focus:outline-none light:border-zinc-300 light:bg-white light:text-zinc-900";
+const btnPrimaryClass = `inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`;
+const btnSecondaryClass = `inline-flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:border-emerald-500 hover:text-white light:border-zinc-300 light:bg-white light:text-zinc-700 light:hover:text-emerald-700 ${focusRing}`;
 const alertClass =
   "rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200 light:text-amber-800";
 
@@ -757,13 +772,22 @@ function GpxUpload({
     // page content loads it, no need to aim for the file input.
     <div onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
       <div className="flex flex-wrap items-center gap-3">
-        <input
-          type="file"
-          accept=".gpx"
-          onChange={handleFile}
-          aria-label={t.uploadCourseAria}
-          className="block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:font-medium file:text-white hover:file:bg-emerald-500 light:text-zinc-500"
-        />
+        {/* A styled label wrapping a visually-hidden input: the native file
+            control ("Choose File / No file chosen") is unstylable AND stays
+            English in the French UI. */}
+        <label
+          className={`${btnPrimaryClass} cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500/60`}
+        >
+          <UploadIcon />
+          {t.uploadCourse}
+          <input
+            type="file"
+            accept=".gpx"
+            onChange={handleFile}
+            aria-label={t.uploadCourseAria}
+            className="sr-only"
+          />
+        </label>
         {/* Example switcher: offer whichever bundled course isn't on screen.
             Imperial is the owner's race; 25 Bosses is the steep showcase. */}
         {(Object.keys(EXAMPLES) as ExampleKey[])
@@ -788,10 +812,16 @@ function GpxUpload({
       )}
 
       {track && (
-        <div className="mt-8 space-y-6">
+        // Keyed by course so switching plans replays the entrance animation.
+        <div
+          key={`${track.distanceKm.toFixed(3)}-${track.gainM.toFixed(0)}`}
+          className="animate-fade-up mt-8 space-y-6"
+        >
+          {/* Quiet editorial label, not a sticker: small emerald caps + a
+              plain sentence. */}
           {exampleShown && (
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-300 light:text-emerald-700">
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-widest text-emerald-500">
                 {t.exampleBadge}
               </span>
               <span className="text-zinc-400 light:text-zinc-600">
@@ -817,7 +847,7 @@ function GpxUpload({
                       type="button"
                       onClick={() => switchUnits(u)}
                       aria-pressed={units === u}
-                      className={`px-3 py-1.5 text-sm font-medium ${
+                      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
                         units === u
                           ? "bg-emerald-600 text-white"
                           : "bg-zinc-800 text-zinc-400 hover:text-zinc-200 light:bg-white light:text-zinc-500 light:hover:text-zinc-800"
@@ -856,7 +886,8 @@ function GpxUpload({
             {/* Jargon controls tucked away — the default view needs none of them.
                 Native <details> keeps it collapsed on load with no extra state. */}
             <details className="mt-4 border-t border-zinc-800 pt-3 light:border-zinc-200">
-              <summary className="cursor-pointer text-sm text-zinc-400 hover:text-zinc-200 light:text-zinc-600 light:hover:text-zinc-900">
+              <summary className="flex cursor-pointer items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-600 light:hover:text-zinc-900">
+                <ChevronIcon className="chev h-3.5 w-3.5" />
                 {t.advanced}
               </summary>
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-4">
@@ -908,9 +939,10 @@ function GpxUpload({
               power feature and the expanded paragraph was landing-page
               clutter for first-time visitors. */}
           <details className={cardClass}>
-            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-400 hover:text-zinc-200 light:text-zinc-500 light:hover:text-zinc-800">
+            <summary className="flex cursor-pointer flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-500 light:hover:text-zinc-800">
+              <ChevronIcon className="chev h-3.5 w-3.5" />
               {t.calibTitle}
-              <span className="ml-2 font-normal normal-case tracking-normal text-zinc-500">
+              <span className="ml-1 font-normal normal-case tracking-normal text-zinc-500">
                 {calibrated
                   ? t.calibApplied(terrainFactor.toFixed(2))
                   : t.calibMeasure}
@@ -919,14 +951,20 @@ function GpxUpload({
             <p className="mt-3 text-sm text-zinc-400 light:text-zinc-600">
               {t.calibIntro}
             </p>
-            <input
-              type="file"
-              accept=".gpx"
-              multiple
-              onChange={handleCalibFiles}
-              aria-label={t.calibUploadAria}
-              className="mt-3 block text-sm text-zinc-400 file:mr-3 file:rounded-md file:border file:border-zinc-600 file:bg-zinc-800 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-zinc-200 hover:file:border-emerald-500 light:text-zinc-500 light:file:border-zinc-300 light:file:bg-white light:file:text-zinc-700"
-            />
+            <label
+              className={`${btnSecondaryClass} mt-3 cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500/60`}
+            >
+              <UploadIcon />
+              {t.calibAdd}
+              <input
+                type="file"
+                accept=".gpx"
+                multiple
+                onChange={handleCalibFiles}
+                aria-label={t.calibUploadAria}
+                className="sr-only"
+              />
+            </label>
             {calibError && (
               <div role="alert" className={`mt-3 ${alertClass}`}>
                 {calibError}
@@ -971,9 +1009,9 @@ function GpxUpload({
                         )
                       }
                       aria-label={t.removeRun(run.fileName)}
-                      className="text-zinc-500 hover:text-zinc-200 light:hover:text-zinc-800"
+                      className={`text-zinc-500 transition-colors hover:text-zinc-200 light:hover:text-zinc-800 ${focusRing} rounded`}
                     >
-                      ✕
+                      <CloseIcon className="h-3.5 w-3.5" />
                     </button>
                     {/* Outside the plausible band the number isn't measuring
                         terrain (synthetic route timestamps, a walked outing,
@@ -991,7 +1029,7 @@ function GpxUpload({
                     <button
                       type="button"
                       onClick={applyCalibration}
-                      className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500"
+                      className={btnPrimaryClass}
                     >
                       {t.useFactor(
                         Math.min(1.6, Math.max(0.8, medianFactor)).toFixed(2),
@@ -1032,9 +1070,10 @@ function GpxUpload({
               <button
                 type="button"
                 onClick={() => setChartZoom(true)}
-                className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:border-emerald-500 hover:text-white light:border-zinc-300 light:bg-white light:text-zinc-600 light:hover:text-emerald-700"
+                className={`inline-flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-emerald-500 hover:text-white light:border-zinc-300 light:bg-white light:text-zinc-600 light:hover:text-emerald-700 ${focusRing}`}
               >
-                ⤢ {t.expandChart}
+                <ExpandIcon className="h-3.5 w-3.5" />
+                {t.expandChart}
               </button>
             </div>
           </div>
@@ -1044,7 +1083,7 @@ function GpxUpload({
               bright displays. */}
           {chartZoom && (
             <div
-              className="fixed inset-0 z-50 flex flex-col gap-3 bg-zinc-950 p-4 light:bg-zinc-50 sm:p-8"
+              className="animate-fade-in fixed inset-0 z-50 flex flex-col gap-3 bg-zinc-950 p-4 light:bg-zinc-50 sm:p-8"
               onClick={() => setChartZoom(false)}
             >
               <div
@@ -1059,7 +1098,8 @@ function GpxUpload({
                   onClick={() => setChartZoom(false)}
                   className={btnSecondaryClass}
                 >
-                  ✕ {t.closeChart}
+                  <CloseIcon className="h-4 w-4" />
+                  {t.closeChart}
                 </button>
               </div>
               <div
@@ -1098,8 +1138,9 @@ function GpxUpload({
               </div>
             </div>
             {/* The range IS the product thesis: a to-the-second finish would
-                be false precision. Center = the model's central estimate. */}
-            <div className={cardClass}>
+                be false precision. Center = the model's central estimate.
+                Hero card — the one number everyone came for. */}
+            <div className={heroCardClass}>
               <div className="text-xs uppercase tracking-wider text-zinc-400 light:text-zinc-500">
                 {t.statFinish}
               </div>
@@ -1136,7 +1177,7 @@ function GpxUpload({
                 type="button"
                 onClick={handleShare}
                 disabled={sharing}
-                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className={btnPrimaryClass}
               >
                 {sharing ? t.creatingImage : t.shareImage}
               </button>
@@ -1184,7 +1225,7 @@ function GpxUpload({
                 {(showAllSplits ? splits : splits.slice(0, 12)).map((s) => (
                   <tr
                     key={s.km}
-                    className="border-b border-zinc-800/70 tabular-nums text-zinc-200 hover:bg-zinc-900/40 light:border-zinc-200 light:text-zinc-800 light:hover:bg-zinc-100"
+                    className="border-b border-zinc-800/70 tabular-nums text-zinc-200 transition-colors hover:bg-zinc-900/40 light:border-zinc-200 light:text-zinc-800 light:hover:bg-zinc-100"
                   >
                     <td className="py-1.5 pr-4">
                       {s.km}
@@ -1225,7 +1266,7 @@ function GpxUpload({
               <button
                 type="button"
                 onClick={() => setShowAllSplits((v) => !v)}
-                className="mt-3 w-full rounded-md border border-zinc-800 py-2 text-sm text-zinc-400 hover:border-emerald-500 hover:text-zinc-200 light:border-zinc-200 light:text-zinc-500 light:hover:text-zinc-800"
+                className={`mt-3 w-full rounded-md border border-zinc-800 py-2 text-sm text-zinc-400 transition-colors hover:border-emerald-500 hover:text-zinc-200 light:border-zinc-200 light:text-zinc-500 light:hover:text-zinc-800 ${focusRing}`}
               >
                 {showAllSplits ? t.showFewer : t.showAll(splits.length)}
               </button>
@@ -1279,17 +1320,23 @@ function App() {
       {/* max-w-5xl: the previous 3xl column read as a narrow stripe on large
           desktop screens (owner feedback from a 27" 1440p display). */}
       <div className="mx-auto max-w-5xl">
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="text-3xl font-bold tracking-tight">GradePace</h1>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {/* The same trend-line mark as the share card — one brand. */}
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 light:border-zinc-200 light:bg-white">
+              <LogoMark />
+            </span>
+            <h1 className="text-3xl font-bold tracking-tight">GradePace</h1>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={toggleTheme}
               aria-label={theme === "dark" ? t.themeToLight : t.themeToDark}
               title={theme === "dark" ? t.themeToLight : t.themeToDark}
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-sm text-zinc-400 hover:text-zinc-100 light:border-zinc-300 light:bg-white light:text-zinc-500 light:hover:text-zinc-900"
+              className={`rounded-md border border-zinc-700 bg-zinc-900 p-1.5 text-zinc-400 transition-colors hover:text-zinc-100 light:border-zinc-300 light:bg-white light:text-zinc-500 light:hover:text-zinc-900 ${focusRing}`}
             >
-              {theme === "dark" ? "☀" : "☾"}
+              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
             </button>
             <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs light:border-zinc-300">
               {(["en", "fr"] as const).map((l) => (
@@ -1298,7 +1345,7 @@ function App() {
                   type="button"
                   onClick={() => switchLang(l)}
                   aria-pressed={lang === l}
-                  className={`px-2.5 py-1 font-medium uppercase ${
+                  className={`px-2.5 py-1.5 font-medium uppercase transition-colors ${
                     lang === l
                       ? "bg-zinc-700 text-white light:bg-zinc-800"
                       : "bg-zinc-900 text-zinc-500 hover:text-zinc-200 light:bg-white light:hover:text-zinc-800"

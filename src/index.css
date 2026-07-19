@@ -14,3 +14,57 @@ body {
   background-color: #fafafa; /* zinc-50 */
   color: #18181b; /* zinc-900 */
 }
+
+/* Native <details> markers are replaced by an animated chevron (App.tsx). */
+summary {
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+.chev {
+  transition: transform 0.2s ease;
+}
+details[open] summary .chev {
+  transform: rotate(90deg);
+}
+/* Newly revealed details content eases in instead of popping. */
+details[open] > :not(summary) {
+  animation: fade-up 0.25s ease-out both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.4s ease-out both;
+}
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-in,
+  details[open] > :not(summary) {
+    animation: none;
+  }
+  .chev {
+    transition: none;
+  }
+}

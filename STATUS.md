@@ -352,6 +352,25 @@
   name, and the footer GitHub link updated to
   github.com/Alvaro5/grade-pace.
 
+- **UI polish pass (owner feedback: glyph buttons + badge pill read as
+  unfinished; wanted motion).**
+  - `src/icons.tsx`: hand-rolled stroke SVG icons (sun/moon/upload/expand/
+    close/chevron + the brand LogoMark) replacing ☀ ☾ ⤢ ✕ text glyphs that
+    rendered as emoji or shifted baseline per platform.
+  - Native file inputs ("Choose File / No file chosen" — unstylable AND
+    English-only in the FR UI) → styled label-buttons with the upload icon
+    ("Upload GPX / Importer un GPX", "Add recorded runs / Ajouter des
+    sorties").
+  - Example pill → quiet editorial label (small emerald caps + sentence).
+  - Header: LogoMark tile beside the wordmark (same motif as share card).
+  - Motion: dashboard fades up on course load (keyed per course), details
+    content eases in, animated chevrons replace native markers, fullscreen
+    chart fades in, transition-colors on every interactive element,
+    focus-visible rings throughout; all gated by prefers-reduced-motion.
+  - Shared btnPrimary/btnSecondary/focusRing constants unify every button.
+  - Projected-finish card gets an emerald accent border (the hero number).
+  Verified in both themes and both languages.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay
