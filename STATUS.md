@@ -424,6 +424,22 @@
   the wrong passage on out-and-back courses — hence always-editable text.
   `aid-autofill` analytics event.
 
+- **Course map (Leaflet + OpenTopoMap).** New `src/CourseMap.tsx`, lazy like
+  the chart (own 44 kB gzip chunk; main bundle untouched). Topo tiles suit
+  the trail context; attribution per license (OSM contributors, SRTM,
+  OpenTopoMap CC-BY-SA). The route renders as RLE-colored polylines using
+  the SAME grade scale + hike-gate as the profile — rose on the map = "the
+  plan walks here" everywhere. Start/finish endpoint dots (i18n tooltips),
+  aid stations as amber markers whose tooltips carry the R-number + distance
+  + PROJECTED arrival (reuses aidStops). Details: scroll-wheel zoom off (the
+  map mid-page would trap page scroll); aid markers in their own layer so
+  editing stations never re-fits the bounds; `relative z-0` wrapper because
+  Leaflet's internal panes (z≈400) would otherwise paint over the
+  fullscreen-chart overlay (z-50). Map mocked in the app smoke test
+  (happy-dom has no layout). Tiles are the app's second external runtime
+  dependency (after Umami) — OpenTopoMap is free/fair-use; swap to a keyed
+  provider if traffic ever makes that impolite.
+
 ## Next
 - **Optional elevation polish** (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay

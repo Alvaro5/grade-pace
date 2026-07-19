@@ -78,6 +78,8 @@ src/
   lib/gradeColor.ts    Shared grade→color scale (chart + share card).
   App.tsx              UI: upload, effort inputs, calibration, share, table.
   ElevationChart.tsx   Grade-colored profile (lazy-loaded Recharts chunk).
+  CourseMap.tsx        Topo map with the grade-colored route + aid stations
+                       (lazy-loaded Leaflet chunk, OpenTopoMap tiles).
   ErrorBoundary.tsx    Styled fallback instead of a white screen.
 ```
 

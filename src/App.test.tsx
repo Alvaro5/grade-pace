@@ -12,9 +12,13 @@ import App from "./App";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-// The chart is irrelevant to the wiring under test, and Recharts needs real
-// layout measurement that happy-dom doesn't do — stub the lazy chunk out.
+// The chart and map are irrelevant to the wiring under test, and Recharts/
+// Leaflet need real layout measurement that happy-dom doesn't do — stub the
+// lazy chunks out.
 vi.mock("./ElevationChart", () => ({
+  default: () => null,
+}));
+vi.mock("./CourseMap", () => ({
   default: () => null,
 }));
 

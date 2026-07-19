@@ -119,6 +119,9 @@ const en = {
   calibAdd: "Add recorded runs",
   aidLabel: "Aid stations",
   aidPlaceholder: "e.g. 17, 33, 47",
+  mapStart: "Start",
+  mapFinish: "Finish",
+  mapAria: "Course map",
 };
 
 export type Messages = typeof en;
@@ -229,6 +232,9 @@ const fr: Messages = {
   calibAdd: "Ajouter des sorties",
   aidLabel: "Ravitaillements",
   aidPlaceholder: "ex. 17, 33, 47",
+  mapStart: "Départ",
+  mapFinish: "Arrivée",
+  mapAria: "Carte du parcours",
 };
 
 export const MESSAGES: Record<Lang, Messages> = { en, fr };

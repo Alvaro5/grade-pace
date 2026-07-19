@@ -2,8 +2,9 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 // Recharts is ~500 kB — by far the heaviest dependency — so the chart loads as
-// its own async chunk and never blocks first paint.
+// its own async chunk and never blocks first paint. Same for Leaflet.
 const ElevationChart = lazy(() => import("./ElevationChart"));
+const CourseMap = lazy(() => import("./CourseMap"));
 import {
   parseGpx,
   cumulativeDistances,
@@ -102,6 +103,7 @@ type Track = {
   distanceKm: number;
   gainM: number;
   profile: { km: number; ele: number }[];
+  coords: { lat: number; lon: number }[]; // resampled positions, for the map
   // Aid-station km auto-detected from the file's <wpt> waypoints (usually
   // empty — most route exports carry none). Pre-fills the ravitaillements
   // field; always user-editable afterwards.
@@ -153,6 +155,7 @@ function buildTrack(text: string): Track {
       km: distances[i] / 1000,
       ele: p.ele,
     })),
+    coords: resampled.points.map((p) => ({ lat: p.lat, lon: p.lon })),
     fileAidKms,
   };
 }
@@ -1204,6 +1207,26 @@ function GpxUpload({
               </div>
             )}
           </details>
+
+          {/* Course map: same grade colors as the profile (rose = the plan
+              walks), aid stations with their ETAs in tooltips. Lazy chunk —
+              Leaflet + tiles load after the page is interactive. */}
+          <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 p-2 light:border-zinc-200 light:bg-white">
+            <Suspense fallback={<div className="h-72" />}>
+              <CourseMap
+                coords={track.coords}
+                grades={track.grades}
+                hikeAboveGrade={hikeAbovePct / 100}
+                aid={aidStops.map((s, i) => ({
+                  km: s.km,
+                  label: `R${i + 1} · ${distStr(s.km)} · ≈ ${fmtClockShort(s.eta)}`,
+                }))}
+                startLabel={t.mapStart}
+                finishLabel={t.mapFinish}
+                ariaLabel={t.mapAria}
+              />
+            </Suspense>
+          </div>
 
           <div className={cardClass}>
             {/* Fixed-height fallback so the layout doesn't jump when the
