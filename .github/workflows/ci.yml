@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref (e.g. rapid pushes to a PR).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm install`, not `npm ci`: sharp and the tailwind-oxide / rolldown
+      # wasm fallbacks pull nested, platform-specific optional deps that a
+      # macOS-generated lockfile can't fully describe for a Linux runner, so
+      # `npm ci`'s strict lockfile check fails. `npm install` reconciles the
+      # tree for whatever platform the runner is.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test (Vitest)
+        run: npm test
+
+      - name: Build
+        run: npm run build
