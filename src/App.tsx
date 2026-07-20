@@ -60,6 +60,8 @@ import {
   parseStartTime,
   type CutoffStatus,
 } from "./lib/logistics";
+import { clearPlan, loadPlan, savePlan } from "./lib/persistence";
+import { buildPlanGpx } from "./lib/planGpx";
 import { MESSAGES, initialLang, type Lang, type Messages } from "./lib/i18n";
 // Aliased: `track` is taken by the parsed-GPX state variable in GpxUpload.
 import { track as trackEvent } from "./lib/analytics";
@@ -76,6 +78,7 @@ import {
   LinkIcon,
   CheckIcon,
   FileIcon,
+  WatchIcon,
   LogoMark,
 } from "./icons";
 
@@ -264,6 +267,7 @@ type HashPlan = {
   nc?: number;
   nfl?: number;
   ns?: number;
+  ncf?: number; // caffeine mg/h, only when enabled
   // Race logistics: minutes per aid station, start time "HH:MM", cutoffs as
   // elapsed "H:MM" list (unit-free, so no imperial conversion like `rav`).
   dw?: number;
@@ -285,6 +289,7 @@ const FLUID_MIN = 250,
   FLUID_MAX = 1000;
 const SODIUM_MIN = 300,
   SODIUM_MAX = 1200;
+const CAFFEINE_MAX = 100;
 
 function readPlanFromHash(): HashPlan {
   try {
@@ -315,6 +320,8 @@ function readPlanFromHash(): HashPlan {
     if (nfl >= FLUID_MIN && nfl <= FLUID_MAX) plan.nfl = Math.round(nfl);
     const ns = Number(p.get("ns"));
     if (ns >= SODIUM_MIN && ns <= SODIUM_MAX) plan.ns = Math.round(ns);
+    const ncf = Number(p.get("ncf"));
+    if (ncf > 0 && ncf <= CAFFEINE_MAX) plan.ncf = Math.round(ncf);
     const dw = Number(p.get("dw"));
     if (p.get("dw") !== null && dw >= 0 && dw <= DWELL_MAX_MIN)
       plan.dw = Math.round(dw);
@@ -466,32 +473,56 @@ function GpxUpload({
   const [error, setError] = useState<string | null>(null);
   // A shared-plan link overrides the defaults for every effort input below.
   const [hashPlan] = useState(readPlanFromHash);
+  // The last UPLOADED plan, restored from this device. Precedence for every
+  // setting is hash > saved > default: a shared link must show the sender's
+  // plan, otherwise a returning user gets their own back.
+  const [savedPlan] = useState(loadPlan);
+  // Whether the CURRENT course auto-saves (true after a real upload or a
+  // saved-plan restore; false on examples). State for the badge, ref for the
+  // load callback that flips it.
+  const [savedActive, setSavedActive] = useState(false);
+  const savedActiveRef = useRef(false);
+  const gpxTextRef = useRef<string | null>(null);
   const [units, setUnits] = useState<Units>(
-    () => hashPlan.units ?? initialUnits(),
+    () => hashPlan.units ?? savedPlan?.units ?? initialUnits(),
   );
   // A sensible easy default in the active unit (6:00/km ≈ 9:39/mi).
   const [paceText, setPaceText] = useState(
-    hashPlan.pace ?? (units === "imperial" ? "9:40" : "6:00"),
+    hashPlan.pace ??
+      savedPlan?.paceText ??
+      (units === "imperial" ? "9:40" : "6:00"),
   );
-  const [vam, setVam] = useState(hashPlan.vam ?? 750);
-  const [hikeAbovePct, setHikeAbovePct] = useState(hashPlan.gate ?? 18);
+  const [vam, setVam] = useState(hashPlan.vam ?? savedPlan?.vam ?? 750);
+  const [hikeAbovePct, setHikeAbovePct] = useState(
+    hashPlan.gate ?? savedPlan?.gatePct ?? 18,
+  );
   const [terrainFactor, setTerrainFactor] = useState(
-    hashPlan.tf ?? DEFAULT_TERRAIN_FACTOR,
+    hashPlan.tf ?? savedPlan?.terrainFactor ?? DEFAULT_TERRAIN_FACTOR,
   );
   // Nutrition rates (per hour). Like the effort inputs, a shared link can
   // carry them; otherwise the sports-science mid-band defaults apply.
   const [nutriRates, setNutriRates] = useState<NutritionRates>({
-    carbsGPerH: hashPlan.nc ?? DEFAULT_RATES.carbsGPerH,
-    fluidMlPerH: hashPlan.nfl ?? DEFAULT_RATES.fluidMlPerH,
-    sodiumMgPerH: hashPlan.ns ?? DEFAULT_RATES.sodiumMgPerH,
+    carbsGPerH:
+      hashPlan.nc ?? savedPlan?.carbsGPerH ?? DEFAULT_RATES.carbsGPerH,
+    fluidMlPerH:
+      hashPlan.nfl ?? savedPlan?.fluidMlPerH ?? DEFAULT_RATES.fluidMlPerH,
+    sodiumMgPerH:
+      hashPlan.ns ?? savedPlan?.sodiumMgPerH ?? DEFAULT_RATES.sodiumMgPerH,
+    caffeineMgPerH: hashPlan.ncf ?? savedPlan?.caffeineMgPerH ?? 0,
   });
   // Race logistics: minutes per station, optional start time (wall-clock
   // display) and per-station cutoff barriers (elapsed H:MM, course order).
-  const [dwellMin, setDwellMin] = useState(hashPlan.dw ?? DWELL_DEFAULT_MIN);
-  const [startText, setStartText] = useState(hashPlan.st ?? "");
-  const [cutoffText, setCutoffText] = useState(hashPlan.co ?? "");
+  const [dwellMin, setDwellMin] = useState(
+    hashPlan.dw ?? savedPlan?.dwellMin ?? DWELL_DEFAULT_MIN,
+  );
+  const [startText, setStartText] = useState(
+    hashPlan.st ?? savedPlan?.startText ?? "",
+  );
+  const [cutoffText, setCutoffText] = useState(
+    hashPlan.co ?? savedPlan?.cutoffText ?? "",
+  );
   // Course name shown on the shareable image; prefilled on load, editable.
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(savedPlan?.title ?? "");
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   // The full table is ~70 rows for a 70k — collapsed by default so the page
@@ -578,9 +609,9 @@ function GpxUpload({
   // Aid stations ("ravitaillements") as free text in the ACTIVE unit —
   // "17, 33, 47". Parsed leniently every render; the hash stores metric km.
   const [aidText, setAidText] = useState(() => {
-    if (!hashPlan.rav?.length) return "";
+    if (!hashPlan.rav?.length) return savedPlan?.aidText ?? "";
     const vals =
-      (hashPlan.units ?? initialUnits()) === "imperial"
+      (hashPlan.units ?? savedPlan?.units ?? initialUnits()) === "imperial"
         ? hashPlan.rav.map((k) => +(k / KM_PER_MI).toFixed(1))
         : hashPlan.rav.map((k) => +k.toFixed(1));
     return vals.join(", ");
@@ -628,6 +659,8 @@ function GpxUpload({
       params.set("nfl", String(nutriRates.fluidMlPerH));
     if (nutriRates.sodiumMgPerH !== DEFAULT_RATES.sodiumMgPerH)
       params.set("ns", String(nutriRates.sodiumMgPerH));
+    if ((nutriRates.caffeineMgPerH ?? 0) > 0)
+      params.set("ncf", String(nutriRates.caffeineMgPerH));
     // Logistics: dwell when customized, start when valid, cutoffs only when
     // stations exist AND every token is valid (a partial list would shift
     // the station↔cutoff pairing for the recipient).
@@ -665,7 +698,11 @@ function GpxUpload({
   const calibId = useRef(0);
   // True while the terrain factor comes from a measured fit — narrows the
   // finish range. Manually touching the terrain slider makes it a guess again.
-  const [calibrated, setCalibrated] = useState(false);
+  // Restored with a saved plan (the measurement stands), but never from a
+  // hash link: the recipient didn't calibrate, so they get the wide band.
+  const [calibrated, setCalibrated] = useState(
+    hashPlan.tf === undefined && (savedPlan?.calibrated ?? false),
+  );
 
   // Pace text validates on every keystroke; while it's invalid (mid-edit or a
   // typo) the plan keeps using the last valid pace instead of silently
@@ -674,6 +711,8 @@ function GpxUpload({
   const [lastValidPaceSec, setLastValidPaceSec] = useState(() => {
     const fromHash = parsePace(hashPlan.pace ?? "");
     if (!Number.isNaN(fromHash)) return fromHash;
+    const fromSaved = parsePace(savedPlan?.paceText ?? "");
+    if (!Number.isNaN(fromSaved)) return fromSaved;
     return units === "imperial" ? 580 : 360;
   });
   const paceSec = parsePace(paceText);
@@ -720,7 +759,8 @@ function GpxUpload({
 
   // Display helpers for the active unit — data underneath stays metric.
   // Thousands separators follow the UI language (1,193 ft / 1 193 ft).
-  const numLocale = lang === "fr" ? "fr-FR" : "en-US";
+  const numLocale =
+    lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US";
   const distStr = (km: number) =>
     units === "imperial"
       ? `${(km / KM_PER_MI).toFixed(2)} mi`
@@ -856,7 +896,7 @@ function GpxUpload({
   function loadGpx(
     textPromise: Promise<string>,
     genericMsg: string,
-    source: "upload" | "example" | "auto",
+    source: "upload" | "example" | "auto" | "saved",
     exampleKey: ExampleKey | null,
   ) {
     setError(null);
@@ -865,6 +905,12 @@ function GpxUpload({
         const built = buildTrack(text);
         setTrack(built);
         setExampleShown(exampleKey);
+        // Persistence bookkeeping: uploads (and the restored plan itself)
+        // keep auto-saving; loading an example makes the session ephemeral
+        // again so the example never overwrites a real saved plan.
+        savedActiveRef.current = source === "upload" || source === "saved";
+        gpxTextRef.current = savedActiveRef.current ? text : null;
+        setSavedActive(savedActiveRef.current);
         // POIs belong to a course — a new course resets the overlay (and
         // cancels any fetch in flight) so stale pins can't linger.
         poiAbort.current?.abort();
@@ -874,8 +920,11 @@ function GpxUpload({
         // Aid stations are course data: a new course either brings its own
         // (file waypoints → auto-fill) or invalidates the previous entries.
         // The first-visit auto-load is exempt so a shared link's stations
-        // (hash `rav`) survive landing on the example.
-        if (built.fileAidKms.length) {
+        // (hash `rav`) survive landing on the example, and the saved restore
+        // keeps the user's own (possibly edited) station list.
+        if (source === "saved") {
+          /* aidText already restored from the saved plan */
+        } else if (built.fileAidKms.length) {
           setAidText(
             built.fileAidKms
               .map((k) =>
@@ -892,11 +941,21 @@ function GpxUpload({
             upload: "upload-gpx",
             example: "load-example",
             auto: "auto-example",
+            saved: "restore-saved",
           }[source],
           exampleKey ? { course: exampleKey } : undefined,
         );
       })
       .catch((err) => {
+        // A corrupt SAVED plan falls back to the example silently: the user
+        // didn't act, so no error banner, and the bad entry is dropped so it
+        // can't fail again next visit.
+        if (source === "saved") {
+          clearPlan();
+          loadExample("imperial", "auto");
+          console.error(err);
+          return;
+        }
         // Map known parse failures to friendly inline copy; anything else gets a
         // generic message so the upload never crashes the page.
         setTrack(null);
@@ -954,31 +1013,96 @@ function GpxUpload({
     );
   }
 
-  // First visit: open on the full dashboard (the example course) instead of an
-  // empty page — most visitors arrive from a link on a phone with no GPX file,
-  // so the example IS the demo. Ref-guarded so StrictMode's double-mount in dev
-  // doesn't fetch twice.
+  // First visit: open on the full dashboard instead of an empty page. A plan
+  // saved on this device wins over the bundled example (returning users get
+  // THEIR course back); most first-time visitors arrive from a link with no
+  // GPX, so the example is their demo. Ref-guarded so StrictMode's
+  // double-mount in dev doesn't fetch twice.
   const autoLoaded = useRef(false);
   useEffect(() => {
     if (autoLoaded.current) return;
     autoLoaded.current = true;
-    loadExample("imperial", "auto");
+    if (savedPlan) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-only initial data load
+      loadGpx(Promise.resolve(savedPlan.gpxText), t.errGeneric, "saved", null);
+    } else {
+      loadExample("imperial", "auto");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
   }, []);
 
+  // Auto-save the active plan (course + every setting) whenever something
+  // changes, debounced so typing doesn't serialize a megabyte of GPX per
+  // keystroke. Only uploads/restores persist — never the examples.
+  useEffect(() => {
+    if (!savedActive || !gpxTextRef.current || !track) return;
+    const timer = setTimeout(() => {
+      savePlan({
+        v: 1,
+        savedAt: Date.now(),
+        gpxText: gpxTextRef.current!,
+        title,
+        units,
+        paceText,
+        vam,
+        gatePct: hikeAbovePct,
+        terrainFactor,
+        calibrated,
+        aidText,
+        dwellMin,
+        startText,
+        cutoffText,
+        carbsGPerH: nutriRates.carbsGPerH,
+        fluidMlPerH: nutriRates.fluidMlPerH,
+        sodiumMgPerH: nutriRates.sodiumMgPerH,
+        caffeineMgPerH: nutriRates.caffeineMgPerH ?? 0,
+      });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    savedActive,
+    track,
+    title,
+    units,
+    paceText,
+    vam,
+    hikeAbovePct,
+    terrainFactor,
+    calibrated,
+    aidText,
+    dwellMin,
+    startText,
+    cutoffText,
+    nutriRates,
+  ]);
+
+  // "Forget": drop the saved plan and start clean on the example.
+  function handleForgetSaved() {
+    clearPlan();
+    trackEvent("saved-reset");
+    window.location.replace(window.location.pathname);
+  }
+
   // Derive the plan from the parsed track + the effort inputs, so editing a
   // field recomputes without re-uploading. Cheap enough to run every render.
-  const splits: Split[] = track
-    ? computeSplits(
-        track.distances,
-        track.grades,
-        enginePaceSecPerKm,
-        Math.max(1, vam),
-        hikeAbovePct / 100,
-        terrainFactor,
-        bucketMeters,
-      )
-    : [];
+  // Memoized: recomputing ~7k segments on every unrelated render (typing a
+  // course title, toggling a card) is wasted work, and with the sensitivity
+  // variants there are five of these per plan change.
+  const splits: Split[] = useMemo(
+    () =>
+      track
+        ? computeSplits(
+            track.distances,
+            track.grades,
+            enginePaceSecPerKm,
+            Math.max(1, vam),
+            hikeAbovePct / 100,
+            terrainFactor,
+            bucketMeters,
+          )
+        : [],
+    [track, enginePaceSecPerKm, vam, hikeAbovePct, terrainFactor, bucketMeters],
+  );
   const timeSec = splits.length ? splits[splits.length - 1].elapsedSec : 0;
   // Honest range around the central estimate; calibration narrows the band.
   const range = finishRange(timeSec, calibrated);
@@ -1041,6 +1165,37 @@ function GpxUpload({
     list.push(i + 1);
     aidByBucket.set(idx, list);
   });
+
+  // Pace sensitivity: what ±15/±30 s on the flat pace buys on THIS course.
+  // Memoized: four extra computeSplits are cheap, but not per-keystroke-cheap.
+  const sensitivity = useMemo(() => {
+    if (!track) return [];
+    const engineFactor = units === "imperial" ? 1 / KM_PER_MI : 1;
+    return [-30, -15, 15, 30].map((deltaDisplay) => {
+      const displaySec = effectivePaceSec + deltaDisplay;
+      const s = computeSplits(
+        track.distances,
+        track.grades,
+        displaySec * engineFactor,
+        Math.max(1, vam),
+        hikeAbovePct / 100,
+        terrainFactor,
+        bucketMeters,
+      );
+      return {
+        paceLabel: `${fmtPace(displaySec)}/${units === "imperial" ? "mi" : "km"}`,
+        movingSec: s.length ? s[s.length - 1].elapsedSec : 0,
+      };
+    });
+  }, [
+    track,
+    effectivePaceSec,
+    units,
+    vam,
+    hikeAbovePct,
+    terrainFactor,
+    bucketMeters,
+  ]);
 
   // Dwell-adjusted logistics. The engine and calibration stay on MOVING time
   // (dwell threading through computeSplits would mis-calibrate every fit, and
@@ -1137,6 +1292,7 @@ function GpxUpload({
         siteUrl: window.location.host,
         units,
         hikeAboveGrade: hikeAbovePct / 100,
+        aidKms,
       };
       const blob = await svgToPng(buildShareCardSvg(data), 1200, 630);
       const file = new File([blob], "gradepace-plan.png", {
@@ -1229,6 +1385,7 @@ function GpxUpload({
             t.colCarbs,
             t.colFluid,
             t.colSodium,
+            ...((nutriRates.caffeineMgPerH ?? 0) > 0 ? [t.colCaffeine] : []),
             t.colKcal,
           ],
           rows: nutrition.legs.map((leg, i) => [
@@ -1237,6 +1394,9 @@ function GpxUpload({
             carbsStr(leg.carbsG),
             fluidStr(leg.fluidMl),
             sodiumStr(leg.sodiumMg),
+            ...((nutriRates.caffeineMgPerH ?? 0) > 0
+              ? [`${Math.round(leg.caffeineMg)} mg`]
+              : []),
             String(Math.round(leg.kcal)),
           ]),
           totalRow:
@@ -1247,6 +1407,9 @@ function GpxUpload({
                   carbsStr(nutrition.totals.carbsG),
                   fluidStr(nutrition.totals.fluidMl),
                   sodiumStr(nutrition.totals.sodiumMg),
+                  ...((nutriRates.caffeineMgPerH ?? 0) > 0
+                    ? [`${Math.round(nutrition.totals.caffeineMg)} mg`]
+                    : []),
                   String(Math.round(nutrition.totals.kcal)),
                 ]
               : undefined,
@@ -1325,6 +1488,32 @@ function GpxUpload({
     trackEvent("export-sheet");
   }
 
+  // Watch export: the course as a GPX track plus start/finish/aid waypoints
+  // carrying the plan's ETAs, ready for a Garmin/COROS course import.
+  function handleExportGpx() {
+    if (!track) return;
+    const xml = buildPlanGpx({
+      title: title.trim() || t.racePlan,
+      coords: track.coords,
+      eles: track.profile.map((p) => p.ele),
+      aid: adjStops.map((s, i) => ({
+        km: s.km,
+        name: `R${i + 1} · ${distStr(s.km)} · ETA ${fmtClockShort(s.arriveSec)}${clockAt(s.arriveSec) ? ` (${clockAt(s.arriveSec)})` : ""}`,
+      })),
+      startName: `${t.mapStart}${startSec !== null ? ` · ${startText.trim()}` : ""}`,
+      finishName: `${t.mapFinish} · ≈ ${fmtClockShort(adjFinishSec)}`,
+    });
+    const url = URL.createObjectURL(
+      new Blob([xml], { type: "application/gpx+xml" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "gradepace-plan.gpx";
+    a.click();
+    URL.revokeObjectURL(url);
+    trackEvent("export-gpx");
+  }
+
   const legendLabel: Record<string, string> = {
     descent: t.legendDescent,
     runnable: t.legendRunnable,
@@ -1344,7 +1533,11 @@ function GpxUpload({
       ))}
     </div>
   );
-  const chartLabels = { elevation: t.elevationWord, powerHike: t.powerHikeWord };
+  const chartLabels = {
+    elevation: t.elevationWord,
+    powerHike: t.powerHikeWord,
+    dplusLeft: t.chartDplusLeft,
+  };
 
   // Memoized so CourseMap's effects (keyed on these props) don't re-run on
   // every unrelated render of this component.
@@ -1357,6 +1550,8 @@ function GpxUpload({
         hybrid: t.mapLayerHybrid,
       },
       layersAria: t.mapLayersAria,
+      locateLabel: t.mapLocate,
+      locateError: t.mapLocateError,
       poiToggle: t.mapPoiToggle,
       poiHint: t.mapPoiHint,
       poiLoading: t.mapPoiLoading,
@@ -1443,6 +1638,25 @@ function GpxUpload({
                   ? t.exampleImperial
                   : t.exampleBosses}
               </span>
+            </div>
+          )}
+          {/* Persistence note for the user's own course: quiet, same
+              editorial register as the example badge. */}
+          {savedActive && !exampleShown && (
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-widest text-emerald-500">
+                {t.savedBadge}
+              </span>
+              <span className="text-zinc-400 light:text-zinc-600">
+                {t.savedNote}
+              </span>
+              <button
+                type="button"
+                onClick={handleForgetSaved}
+                className={`rounded text-zinc-500 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-zinc-200 light:decoration-zinc-400 light:hover:text-zinc-800 ${focusRing}`}
+              >
+                {t.savedForget}
+              </button>
             </div>
           )}
           <div className={cardClass}>
@@ -1616,7 +1830,7 @@ function GpxUpload({
                     {run.dateMs !== null && (
                       <span className="text-zinc-500">
                         {new Date(run.dateMs).toLocaleDateString(
-                          lang === "fr" ? "fr-FR" : "en-US",
+                          lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US",
                           { year: "numeric", month: "short" },
                         )}
                       </span>
@@ -2036,6 +2250,21 @@ function GpxUpload({
             </div>
           </div>
           <p className="text-xs text-zinc-500">{t.rangeNote}</p>
+          {/* What a different flat pace buys on THIS course: the question
+              every runner actually asks. Same dwell applies to all variants. */}
+          {sensitivity.length > 0 && (
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-zinc-500">
+              <span>{t.sensitivityLabel}</span>
+              {sensitivity.map((v) => (
+                <span key={v.paceLabel}>
+                  {v.paceLabel}{" "}
+                  <span className="text-zinc-300 light:text-zinc-700">
+                    {fmtClockShort(v.movingSec + totalDwellSec)}
+                  </span>
+                </span>
+              ))}
+            </p>
+          )}
 
           {/* Compact one-row share bar — the button label says what it does,
               so no explainer paragraph. siteUrl is taken at runtime so the
@@ -2077,6 +2306,14 @@ function GpxUpload({
               >
                 <FileIcon />
                 {t.exportSheet}
+              </button>
+              <button
+                type="button"
+                onClick={handleExportGpx}
+                className={btnSecondaryClass}
+              >
+                <WatchIcon />
+                {t.exportGpx}
               </button>
             </div>
             {shareError && (
@@ -2153,6 +2390,22 @@ function GpxUpload({
                     setNutriRates((r) => ({ ...r, sodiumMgPerH: n }))
                   }
                 />
+                <SliderField
+                  label={t.caffeineLabel}
+                  hint={t.caffeineHint}
+                  display={
+                    (nutriRates.caffeineMgPerH ?? 0) > 0
+                      ? `${nutriRates.caffeineMgPerH} mg/h`
+                      : "0"
+                  }
+                  value={nutriRates.caffeineMgPerH ?? 0}
+                  min={0}
+                  max={CAFFEINE_MAX}
+                  step={10}
+                  onChange={(n) =>
+                    setNutriRates((r) => ({ ...r, caffeineMgPerH: n }))
+                  }
+                />
               </div>
               <div className="-mx-4 mt-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
                 <table className="w-full min-w-[30rem] border-collapse text-sm">
@@ -2173,6 +2426,11 @@ function GpxUpload({
                       <th className="py-2 pr-4 text-right font-medium">
                         {t.colSodium}
                       </th>
+                      {(nutriRates.caffeineMgPerH ?? 0) > 0 && (
+                        <th className="py-2 pr-4 text-right font-medium">
+                          {t.colCaffeine}
+                        </th>
+                      )}
                       <th className="py-2 text-right font-medium">
                         {t.colKcal}
                       </th>
@@ -2202,6 +2460,11 @@ function GpxUpload({
                         <td className="py-1.5 pr-4 text-right">
                           {sodiumStr(leg.sodiumMg)}
                         </td>
+                        {(nutriRates.caffeineMgPerH ?? 0) > 0 && (
+                          <td className="py-1.5 pr-4 text-right">
+                            {Math.round(leg.caffeineMg)} mg
+                          </td>
+                        )}
                         <td className="py-1.5 text-right">
                           {Math.round(leg.kcal)}
                         </td>
@@ -2224,6 +2487,11 @@ function GpxUpload({
                         <td className="py-2 pr-4 text-right">
                           {sodiumStr(nutrition.totals.sodiumMg)}
                         </td>
+                        {(nutriRates.caffeineMgPerH ?? 0) > 0 && (
+                          <td className="py-2 pr-4 text-right">
+                            {Math.round(nutrition.totals.caffeineMg)} mg
+                          </td>
+                        )}
                         <td className="py-2 text-right">
                           {Math.round(nutrition.totals.kcal)}
                         </td>
@@ -2415,7 +2683,7 @@ function App() {
               {theme === "dark" ? <SunIcon /> : <MoonIcon />}
             </button>
             <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs light:border-zinc-300">
-              {(["en", "fr"] as const).map((l) => (
+              {(["en", "fr", "es"] as const).map((l) => (
                 <button
                   key={l}
                   type="button"
@@ -2437,6 +2705,33 @@ function App() {
         <div className="mt-6">
           <GpxUpload t={t} lang={lang} theme={theme} />
         </div>
+        {/* Why-trust-this, collapsed: the methodology is a selling point for
+            skeptics but landing-page noise for everyone else. */}
+        <details className="mt-10 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 light:border-zinc-200 light:bg-white">
+          <summary className="flex cursor-pointer flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-500 light:hover:text-zinc-800">
+            <ChevronIcon className="chev h-3.5 w-3.5" />
+            {t.howTitle}
+            <span className="ml-1 font-normal normal-case tracking-normal text-zinc-500">
+              {t.howSubtitle}
+            </span>
+          </summary>
+          <div className="mt-3 space-y-3 text-sm text-zinc-400 light:text-zinc-600">
+            <p>{t.howModel}</p>
+            <p>{t.howCalib}</p>
+            <p>{t.howRange}</p>
+            <p>
+              <a
+                href="https://github.com/Alvaro5/grade-pace"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-umami-event="click-methodology"
+                className="font-medium text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-emerald-400 light:text-zinc-700 light:decoration-zinc-400 light:hover:text-emerald-700"
+              >
+                {t.howMore}
+              </a>
+            </p>
+          </div>
+        </details>
         <footer className="mt-14 border-t border-zinc-800 pt-6 text-sm text-zinc-500 light:border-zinc-200">
           <p>
             {t.footerBuiltBy}{" "}

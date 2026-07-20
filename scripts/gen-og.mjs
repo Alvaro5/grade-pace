@@ -78,3 +78,28 @@ await sharp(readFileSync(join(pub, "favicon.svg")))
   .png()
   .toFile(join(pub, "apple-touch-icon.png"));
 console.log("wrote public/apple-touch-icon.png (180x180)");
+
+// PWA install icons, from the same favicon source. The "any" icons keep the
+// rounded-square design; the maskable one is full-bleed dark with the mark
+// inside the safe zone (the platform mask crops the edges).
+for (const size of [192, 512]) {
+  await sharp(readFileSync(join(pub, "favicon.svg")), { density: 300 })
+    .resize(size, size)
+    .png()
+    .toFile(join(pub, `pwa-${size}.png`));
+  console.log(`wrote public/pwa-${size}.png`);
+}
+const inner = Math.round(512 * 0.72);
+const mark = await sharp(readFileSync(join(pub, "favicon.svg")), {
+  density: 300,
+})
+  .resize(inner, inner)
+  .png()
+  .toBuffer();
+await sharp({
+  create: { width: 512, height: 512, channels: 4, background: "#18181b" },
+})
+  .composite([{ input: mark, gravity: "centre" }])
+  .png()
+  .toFile(join(pub, "pwa-maskable-512.png"));
+console.log("wrote public/pwa-maskable-512.png");

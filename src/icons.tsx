@@ -142,6 +142,22 @@ export const CheckIcon = ({ className = "h-4 w-4" }: IconProps) => (
   </svg>
 );
 
+export const WatchIcon = ({ className = "h-4 w-4" }: IconProps) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden
+  >
+    <circle cx="12" cy="12" r="6" />
+    <path d="M9 3h6M9 21h6M12 9.5V12l1.8 1.8" />
+  </svg>
+);
+
 export const FileIcon = ({ className = "h-4 w-4" }: IconProps) => (
   <svg
     viewBox="0 0 24 24"

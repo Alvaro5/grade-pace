@@ -25,6 +25,7 @@ export type ShareCardData = {
   siteUrl: string;
   units?: "metric" | "imperial"; // display units; data stays metric. Default metric.
   hikeAboveGrade?: number; // the plan's hike gate — rose on the profile means "walk here"
+  aidKms?: number[]; // aid-station positions (metric km) → amber ticks on the profile
 };
 
 const KM_PER_MI = 1.609344;
@@ -198,6 +199,15 @@ ${stat(860, "POWER-HIKE", hike)}
   <!-- elevation profile -->
   <path d="${area}" fill="url(#ele)"/>
   <path d="${line}" fill="none" stroke="${strokePaint}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- aid stations: amber ticks under the profile -->
+${(d.aidKms ?? [])
+    .filter((k) => d.distanceKm > 0 && k > 0 && k < d.distanceKm)
+    .map((k) => {
+      const tx = PX0 + (k / d.distanceKm) * (PX1 - PX0);
+      return `  <path d="M${tx.toFixed(1)} ${PY_BOTTOM - 1} l-5 9 h10 z" fill="#f59e0b"/>`;
+    })
+    .join("\n")}
 
   <!-- watermark -->
   <text x="1120" y="600" text-anchor="end" font-family="${FONT}" font-size="22" font-weight="500" fill="#52525b">${site}</text>

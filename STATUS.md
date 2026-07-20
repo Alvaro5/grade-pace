@@ -2,7 +2,7 @@
 
 ## Stack (current)
 - Vite + React + TypeScript
-- Tailwind, Recharts (charting)
+- Tailwind; hand-rolled SVG chart; Leaflet maps
 - Deployed: Vercel (auto-deploy from GitHub main)
 - Pacing model: Minetti grade-adjusted cost
 
@@ -613,32 +613,99 @@
     R2 ≈ 3:39 (3:36 moving + R1 dwell), R3 rose at 5:18 vs 5:00, clocks
     hand-checked. 105 tests total.
 
+- **Persistence + PWA (roadmap batch 3).**
+  - *Plan persistence* (`src/lib/persistence.ts`, +5 tests): the last
+    UPLOADED course (raw GPX text, the source of truth) and every plan
+    setting live in one versioned localStorage entry, auto-saved (debounced
+    500 ms) and restored on the next visit with a quiet "Saved" badge + a
+    Forget action. Precedence hash > saved > defaults: shared links always
+    show the sender's plan. The calibrated flag survives a restore (the
+    measurement stands) but still never travels in a link. Examples never
+    overwrite a saved plan; a corrupt save falls back to the example and
+    self-clears. Storage failures (quota, private browsing) degrade to
+    no-persistence, never a crash.
+  - *PWA* (`vite-plugin-pwa`, autoUpdate): installable, app shell precached
+    (18 entries ≈ 890 KiB), so a saved plan opens offline — the race-day
+    case. Deliberately NO runtime caching: map tiles and Overpass stay
+    live-only (usage policies; stale POIs are worse than none), and the
+    bundled example GPX files aren't precached (offline serves YOUR plan,
+    not the demo). Icons generated from the brand favicon (192/512 + a
+    full-bleed maskable) via gen-og.mjs.
+
+- **Roadmap batches 4-9 (owner: "complete everything").**
+  - *Pace sensitivity*: finish at flat pace ±15/±30 s computed on the actual
+    course (memoized computeSplits ×4), one line under the stats.
+  - *Caffeine*: optional mg/h rate (0 = off) in the nutrition lib (+column
+    in the table and PDF when enabled); hash `ncf`, saved-plan field is
+    optional so old saves still load.
+  - *Map*: numbered distance pills every 5 display units (10 past 100) and
+    an on-demand locate-me control (blue dot + accuracy circle; geolocation
+    fires only on click, never leaves the device).
+  - *Spanish*: full typed `es` table (Messages type makes a missing key a
+    compile error), es-ES number formats, browser-language detection, 3-way
+    switcher. Plus a collapsed "How it works" methodology card (EN/FR/ES)
+    above the footer with a GitHub link.
+  - *Error visibility*: window error/unhandledrejection → Umami `app-error`
+    (session-deduped, capped at 5, 120-char truncation).
+  - *Playwright e2e* (`npm run e2e`): three specs against the real preview
+    build with external hosts blocked and Overpass mocked: dashboard
+    renders, Export PDF popup opens with the sheet, POI toggle pins
+    markers. Guards the wiring unit tests mock away.
+  - *Recharts REPLACED with a hand-rolled SVG chart* (~300 lines): the
+    338 kB / 100 kB-gzip chunk became 5.7 kB / 2.6 kB. Same visual contract
+    (two-window grade coloring, RLE gradient stops, padded domain, aid
+    markers, themed grid) and a fully imperative tooltip/cursor (pointer
+    moves mutate DOM through refs; React renders zero times per hover).
+    Recharts uninstalled; its v3 quirks (activeLabel, animation-vs-domain)
+    are gone with it. Verified: tooltip values, hover bridge, tick niceness
+    (1/2/2.5/5 steps), e2e suite green, visual parity in the browser.
+
 ## Next
-- **Optional elevation polish** (only if it earns its keep): expose
-  `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or try a Savitzky-Golay
-  smoother (preserves climb peaks better than a box MA — the research flagged it,
-  but it's harder to explain and the box MA is fine for now).
-- Calibration: decide a believable terrain factor for Fontainebleau. New data
-  point: the four real-run fits now span ×0.99 (flat road) to ×1.08 (campagne
-  trails) with stops filtered — Fontainebleau sand/rocks plausibly ~1.05–1.10.
-  Gut-check against the 68.75 km finish (7:17 @1.00 vs ~7:52 @1.08).
-- Calibration next steps: fit against several efforts (weight recent ones) not
-  a lone run; synthetic-timestamp detector (route exports at constant speed).
-- Fatigue-fade model — ONLY after a second calibration point exists (known split
-  or past race time). Do not fit terrain + fatigue against one finish time.
-- Gradient-colored profile chart — now unblocked by the resample (gradients are
-  clean); clamp grade for display.
-- Bundle ~530 kB (Recharts heavy) → code-split the chart if load time matters
-- Polish: pace stepper, hover tooltips on splits, mobile layout
+- **Owner-gated** (explicitly deferred, do not start without a decision):
+  fatigue-fade model (needs a second calibration point; never fit terrain +
+  fatigue against one finish time); recency/similarity weighting for
+  multi-run calibration (domain logic the owner wants to review deliberately);
+  mobile real-device pass; custom domain.
+- Optional elevation polish (only if it earns its keep): expose
+  `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or a Savitzky-Golay
+  smoother (preserves climb peaks better than a box MA, harder to explain).
+- e2e in CI: once PR #2 (CI workflow) merges, add `npm run e2e` as a job
+  (needs `npx playwright install chromium` in the workflow).
+- Ideas parked: per-station dwell overrides; caffeine back-half weighting;
+  fullscreen-map hover sync; more languages (DE/IT).
+
+- **Final autonomy hour (owner: "anything more?").**
+  - *Watch GPX export* (`src/lib/planGpx.ts`, +4 tests): the course as a
+    ≤2000-point track plus start/finish/aid WAYPOINTS whose names carry the
+    plan's ETAs ("R1 · 17.0 km · ETA 1:52 (09:52)"). Round-trip tested
+    through the app's own parser; XML-escaped; "Watch GPX" button in the
+    share bar. The plan now rides on a Garmin/COROS.
+  - *D+ remaining in the chart tooltip*: new `cumulativeGainSeries` in the
+    engine (same 5 m hysteresis as the headline D+, +1 test) feeds
+    "· D+ left 640 m" into the hover, in all three languages. The racing
+    question ("how much climbing is left from here") answered on hover.
+  - *Share card aid ticks*: amber triangles under the profile at each
+    station (only when stations exist; og.png regenerated, unchanged since
+    the example carries none). Visually verified via a rendered card.
+  - *Perf*: the main computeSplits call is memoized (it ran on every
+    unrelated render; with the sensitivity variants that was 5 engine runs
+    per keystroke in the title field).
 
 ## Known issues
-- Per-km splits don't split the segment straddling a 1000 m boundary, so each km is
-  ~1000–1020 m and distanceKm drifts <2% above 1.0. Principled fix = proportional split at
-  the boundary; deferred for v0. Interim: the final partial km shows its actual distance.
 - parseGpx forward-fills missing <ele>; fine for clean files, revisit if the messier
   September race file has long elevation gaps.
 
 ## Fixed (was a known issue)
+- Per-km buckets ran long (~1000–1020 m, <2% drift) because the segment
+  straddling a boundary joined the earlier bucket whole. computeSplits now
+  splits boundary segments PROPORTIONALLY (time, rise, hike meters scale with
+  the fraction taken; a while-loop even handles segments longer than a
+  bucket). Every full bucket is exactly 1000 m / 1 mile; the remainder is the
+  last row. Verified on the real Imperial GPX: 69 rows, zero non-exact full
+  buckets, finish 7:35:30 unchanged to the second (time is conserved by
+  construction; the row-level pace/D+ shift is the honest re-allocation).
+  Locked by a new boundary-split test suite (uniform-course pace equality,
+  proportional gain, Σ pace×dist === finish, segment > bucket).
 - Gradient spikes (saw +3722%) from near-coincident GPS points — fixed by
   `resampleEven` (10 m even spacing before gradients). Max |gradient| on test
   tracks now <35%.
