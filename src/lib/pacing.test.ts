@@ -14,6 +14,7 @@ import {
   calibrateTerrainFactor,
   finishRange,
   median,
+  weightedMedian,
   resampleEven,
   smoothElevation,
   smoothElevationByDistance,
@@ -436,6 +437,59 @@ describe("computeSplits boundary split", () => {
     expect(splits.map((s) => +(s.distanceKm * 1000).toFixed(3))).toEqual([
       1000, 1000, 500,
     ]);
+  });
+});
+
+describe("computeSplits late-race fade", () => {
+  // 80 flat km at 6:00/km = 8 h base: exactly 4 h before the onset, 4 h in
+  // the fade regime.
+  const dists = Array.from({ length: 81 }, (_, i) => i * 1000);
+  const flat = Array.from({ length: 80 }, () => 0);
+
+  it("rate 0 is the exact identity", () => {
+    const base = computeSplits(dists, flat, 360, 750, 0.18, 1);
+    const faded = computeSplits(dists, flat, 360, 750, 0.18, 1, 1000, 0);
+    expect(faded).toEqual(base);
+  });
+
+  it("leaves everything before the onset untouched", () => {
+    const faded = computeSplits(dists, flat, 360, 750, 0.18, 1, 1000, 0.05);
+    // First 4 h = 40 km at 360 s: bucket 40 ends exactly at the onset.
+    expect(faded[39].elapsedSec).toBeCloseTo(40 * 360, 5);
+    expect(faded[39].paceSecPerKm).toBeCloseTo(360, 5);
+  });
+
+  it("matches an independent forward integration after the onset", () => {
+    const rate = 0.02;
+    const faded = computeSplits(dists, flat, 360, 750, 0.18, 1, 1000, rate);
+    // Same recurrence, independently: per km, dt = 360 × fade(elapsed).
+    let elapsed = 0;
+    for (let k = 0; k < 80; k++)
+      elapsed += 360 * (1 + (rate * Math.max(0, elapsed - 4 * 3600)) / 3600);
+    expect(faded[79].elapsedSec).toBeCloseTo(elapsed, 6);
+    // Sanity: 2%/h fade over the last 4 h adds roughly 10 minutes to 8 h.
+    const extra = faded[79].elapsedSec - 8 * 3600;
+    expect(extra).toBeGreaterThan(8 * 60);
+    expect(extra).toBeLessThan(13 * 60);
+    // And the fade compounds: the last km is the slowest.
+    expect(faded[79].paceSecPerKm).toBeGreaterThan(faded[40].paceSecPerKm);
+  });
+});
+
+describe("weightedMedian", () => {
+  it("reduces to a plain median-ish pick with equal weights", () => {
+    expect(weightedMedian([3, 1, 2], [1, 1, 1])).toBe(2);
+  });
+
+  it("follows the heavy weight", () => {
+    // A dominant fresh run drags the pick to its value.
+    expect(weightedMedian([1.0, 1.1, 1.3], [0.1, 0.1, 5])).toBe(1.3);
+  });
+
+  it("handles degenerate input", () => {
+    expect(weightedMedian([], [])).toBeNull();
+    expect(weightedMedian([1.2], [0])).toBe(1.2);
+    expect(weightedMedian([1, 2], [1])).toBeNull();
   });
 });
 

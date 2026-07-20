@@ -673,6 +673,34 @@
   stale spots (Recharts in Tech, old POI list, export sentence now
   mentioning the watch GPX and languages).
 
+- **SHIP LIKE A MACHINE round (owner rewrote the working rules 2026-07-20:
+  ship domain logic autonomously, report headline moves after the fact).**
+  - *Late-race fade, ON by default* (**HEADLINE MOVED**: Imperial moving
+    finish 7:35:30 → 7:43:26, +8 min at the default 2%/h). computeSplits
+    gained `fadeRatePerHour` (default 0) + `fadeOnsetSec` (4 h): past the
+    onset every segment slows by rate × hours-beyond, compounding on
+    adjusted elapsed (closed-form-tested against an independent forward
+    integration). A FIXED literature-shaped curve (ultra studies show
+    10-20% back-half decay; 2%/h is the conservative middle), NEVER fitted:
+    the terrain+fatigue identifiability rule survives as an engineering
+    constraint in CLAUDE.md. Calibration still runs at rate 0 (typical
+    calibration runs end before the onset). Slider 0-5%/h step 0.5 in
+    advanced settings; hash `ff` (written when ≠ 2); saved plans carry it;
+    sensitivity variants and the PDF settings row include it.
+  - *Recency-weighted calibration*: run factors now combine via a WEIGHTED
+    median (new `weightedMedian` in the engine, +3 tests), weight =
+    0.5^(age/90 days), undated files weigh 1. Robustness of the median
+    kept (a synthetic-timestamp file still can't drag the pick); a fresh
+    run now counts more than a March one. Each run row shows its weight %.
+  - *Race replay on the map* (the X-visitor wow): a ▶ chip animates a dot
+    running the whole course in ~25 s along the TRUE plan timeline (per-
+    coord adjusted elapsed, memoized), with a live readout (km · elapsed ·
+    wall clock). The dot visibly pauses at each ravito because the timeline
+    jumps by the dwell there. Fully imperative rAF (zero React renders per
+    frame); stops on toggle/new course/unmount. Verified + permanently
+    guarded by a 4th Playwright spec (readout advances, wall clock present;
+    the spec also caught that en-US e2e runs in miles). 125 unit + 4 e2e.
+
 ## Next
 - **Owner-gated** (explicitly deferred, do not start without a decision):
   fatigue-fade model (needs a second calibration point; never fit terrain +

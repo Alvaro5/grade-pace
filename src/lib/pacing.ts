@@ -402,6 +402,12 @@ export type Split = {
 // splits). Everything stays metric internally — Split fields are km and
 // sec/km regardless; only the bucketing changes. Total time is invariant to
 // the bucket size (same segments, same sum).
+// Late-race fade: past `fadeOnsetSec` of (adjusted) elapsed time, every
+// segment slows by `fadeRatePerHour` per hour beyond the onset — a fixed
+// literature-shaped curve (ultra pacing studies show 10-20% back-half decay),
+// NOT a fitted parameter. Never fit this jointly with terrainFactor against
+// a single finish time (not identifiable); calibration always runs at rate 0
+// because typical calibration runs end before the onset.
 export function computeSplits(
   dists: number[],
   grades: number[],
@@ -410,6 +416,8 @@ export function computeSplits(
   transitionGrade: number,
   terrainFactor: number,
   bucketMeters = 1000,
+  fadeRatePerHour = 0,
+  fadeOnsetSec = 4 * 3600,
 ): Split[] {
   const splits: Split[] = [];
   let kmMeters = 0;
@@ -450,7 +458,14 @@ export function computeSplits(
       transitionGrade,
     );
 
-    const adjSec = sec * terrainFactor; // technical/soft ground slows all moving time
+    // Terrain slows all moving time; fade compounds on top once the clock
+    // (adjusted elapsed, i.e. time on feet) passes the onset.
+    const fadeMult =
+      fadeRatePerHour > 0
+        ? 1 +
+          (fadeRatePerHour * Math.max(0, elapsedSec - fadeOnsetSec)) / 3600
+        : 1;
+    const adjSec = sec * terrainFactor * fadeMult;
 
     // A segment straddling a bucket boundary is split PROPORTIONALLY (time,
     // rise, hike meters all scale with the fraction taken), so every full
@@ -492,6 +507,28 @@ export function median(values: number[]): number | null {
   const s = [...values].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+// Weighted median: sort by value, walk cumulative weight, return the first
+// value at/past half the total. Used by recency-weighted calibration —
+// fitness drifts over months, so a fresh run should count more than a stale
+// one without letting the stale one vanish. Zero/negative weights are
+// treated as tiny so a pathological input can't divide by zero.
+export function weightedMedian(
+  values: number[],
+  weights: number[],
+): number | null {
+  if (values.length === 0 || values.length !== weights.length) return null;
+  const rows = values
+    .map((v, i) => ({ v, w: Math.max(weights[i], 1e-9) }))
+    .sort((a, b) => a.v - b.v);
+  const total = rows.reduce((s, r) => s + r.w, 0);
+  let cum = 0;
+  for (const r of rows) {
+    cum += r.w;
+    if (cum >= total / 2) return r.v;
+  }
+  return rows[rows.length - 1].v;
 }
 
 // Uncertainty band for the projected finish, as fractions of the central

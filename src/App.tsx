@@ -23,7 +23,7 @@ import {
   computeSplits,
   actualSegmentTimes,
   movingTimeSec,
-  median,
+  weightedMedian,
   finishRange,
   parseGpxWaypoints,
   nearestTrackKm,
@@ -201,6 +201,13 @@ function buildTrack(text: string): Track {
 
 const fmtGrade = (g: number) => `${g > 0 ? "+" : ""}${(g * 100).toFixed(0)}%`;
 
+// Aid-station positions typed as free text ("17, 33, 47"), parsed leniently.
+const parseAidText = (text: string) =>
+  text
+    .split(/[,;\s]+/)
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0);
+
 const gradeClass = (g: number) =>
   g > 0.005
     ? "text-rose-400 light:text-rose-600"
@@ -268,6 +275,7 @@ type HashPlan = {
   nfl?: number;
   ns?: number;
   ncf?: number; // caffeine mg/h, only when enabled
+  ff?: number; // late-race fade, %/h past hour 4
   // Race logistics: minutes per aid station, start time "HH:MM", cutoffs as
   // elapsed "H:MM" list (unit-free, so no imperial conversion like `rav`).
   dw?: number;
@@ -290,6 +298,11 @@ const FLUID_MIN = 250,
 const SODIUM_MIN = 300,
   SODIUM_MAX = 1200;
 const CAFFEINE_MAX = 100;
+// Late-race fade default (%/h past hour 4). 2%/h adds ~10 min to an 8 h
+// race: the conservative middle of published ultra pace-decay data. A fixed
+// curve, never fitted (see pacing.ts).
+const FADE_DEFAULT = 2;
+const FADE_MAX = 5;
 
 function readPlanFromHash(): HashPlan {
   try {
@@ -322,6 +335,9 @@ function readPlanFromHash(): HashPlan {
     if (ns >= SODIUM_MIN && ns <= SODIUM_MAX) plan.ns = Math.round(ns);
     const ncf = Number(p.get("ncf"));
     if (ncf > 0 && ncf <= CAFFEINE_MAX) plan.ncf = Math.round(ncf);
+    const ff = Number(p.get("ff"));
+    if (p.get("ff") !== null && ff >= 0 && ff <= FADE_MAX)
+      plan.ff = Math.round(ff * 2) / 2;
     const dw = Number(p.get("dw"));
     if (p.get("dw") !== null && dw >= 0 && dw <= DWELL_MAX_MIN)
       plan.dw = Math.round(dw);
@@ -510,6 +526,10 @@ function GpxUpload({
       hashPlan.ns ?? savedPlan?.sodiumMgPerH ?? DEFAULT_RATES.sodiumMgPerH,
     caffeineMgPerH: hashPlan.ncf ?? savedPlan?.caffeineMgPerH ?? 0,
   });
+  // Late-race fade, %/h past hour 4 (0 = constant effort).
+  const [fadePctPerH, setFadePctPerH] = useState(
+    hashPlan.ff ?? savedPlan?.fadePctPerH ?? FADE_DEFAULT,
+  );
   // Race logistics: minutes per station, optional start time (wall-clock
   // display) and per-station cutoff barriers (elapsed H:MM, course order).
   const [dwellMin, setDwellMin] = useState(
@@ -617,12 +637,6 @@ function GpxUpload({
     return vals.join(", ");
   });
 
-  const parseAidText = (text: string) =>
-    text
-      .split(/[,;\s]+/)
-      .map(Number)
-      .filter((n) => Number.isFinite(n) && n > 0);
-
   useEffect(() => {
     if (!chartZoom && !mapZoom) return;
     const onKey = (e: KeyboardEvent) => {
@@ -661,6 +675,7 @@ function GpxUpload({
       params.set("ns", String(nutriRates.sodiumMgPerH));
     if ((nutriRates.caffeineMgPerH ?? 0) > 0)
       params.set("ncf", String(nutriRates.caffeineMgPerH));
+    if (fadePctPerH !== FADE_DEFAULT) params.set("ff", String(fadePctPerH));
     // Logistics: dwell when customized, start when valid, cutoffs only when
     // stations exist AND every token is valid (a partial list would shift
     // the station↔cutoff pairing for the recipient).
@@ -779,6 +794,14 @@ function GpxUpload({
   // time at terrain ×1.00 over that run's course, actual moving time on top.
   // A handful of computeSplits calls per render is a few ms — the payoff is
   // that fits can never go stale when the pace/VAM/gate change.
+  // Recency weight: half-life 90 days. Fitness drifts over a season; a
+  // fresh run should count more than a March one without erasing it.
+  // Undated files get weight 1 (no evidence either way).
+  const calibNow = Date.now();
+  const recencyWeight = (dateMs: number | null) =>
+    dateMs === null
+      ? 1
+      : Math.pow(0.5, Math.max(0, calibNow - dateMs) / (90 * 86_400_000));
   const calibFits = calibRuns.map((run) => {
     const predicted = computeSplits(
       run.dists,
@@ -796,14 +819,16 @@ function GpxUpload({
       factor !== null &&
       factor >= FACTOR_PLAUSIBLE_MIN &&
       factor <= FACTOR_PLAUSIBLE_MAX;
-    return { run, factor, plausible };
+    return { run, factor, plausible, weight: recencyWeight(run.dateMs) };
   });
-  const plausibleFactors = calibFits
-    .filter((f) => f.plausible)
-    .map((f) => f.factor!);
-  // Median, not mean: 2–4 samples with one synthetic-timestamp file or one
-  // terrible day shouldn't drag the applied value.
-  const medianFactor = median(plausibleFactors);
+  const plausibleFits = calibFits.filter((f) => f.plausible);
+  const plausibleFactors = plausibleFits.map((f) => f.factor!);
+  // WEIGHTED median: robust like the median (one synthetic-timestamp file
+  // or one terrible day can't drag the pick), recent runs count more.
+  const medianFactor = weightedMedian(
+    plausibleFactors,
+    plausibleFits.map((f) => f.weight),
+  );
 
   function applyCalibration() {
     if (medianFactor === null) return;
@@ -1055,6 +1080,7 @@ function GpxUpload({
         fluidMlPerH: nutriRates.fluidMlPerH,
         sodiumMgPerH: nutriRates.sodiumMgPerH,
         caffeineMgPerH: nutriRates.caffeineMgPerH ?? 0,
+        fadePctPerH,
       });
     }, 500);
     return () => clearTimeout(timer);
@@ -1073,6 +1099,7 @@ function GpxUpload({
     startText,
     cutoffText,
     nutriRates,
+    fadePctPerH,
   ]);
 
   // "Forget": drop the saved plan and start clean on the example.
@@ -1098,9 +1125,18 @@ function GpxUpload({
             hikeAbovePct / 100,
             terrainFactor,
             bucketMeters,
+            fadePctPerH / 100,
           )
         : [],
-    [track, enginePaceSecPerKm, vam, hikeAbovePct, terrainFactor, bucketMeters],
+    [
+      track,
+      enginePaceSecPerKm,
+      vam,
+      hikeAbovePct,
+      terrainFactor,
+      bucketMeters,
+      fadePctPerH,
+    ],
   );
   const timeSec = splits.length ? splits[splits.length - 1].elapsedSec : 0;
   // Honest range around the central estimate; calibration narrows the band.
@@ -1142,7 +1178,7 @@ function GpxUpload({
     }
     return null;
   };
-  const aidKms = (() => {
+  const aidKms = useMemo(() => {
     const raw = parseAidText(aidText);
     const kms = units === "imperial" ? raw.map((v) => v * KM_PER_MI) : raw;
     const total = track?.distanceKm ?? 0;
@@ -1150,7 +1186,7 @@ function GpxUpload({
       .filter((k) => k > 0 && k < total)
       .sort((a, b) => a - b)
       .slice(0, 30);
-  })();
+  }, [aidText, units, track]);
   const aidStops = aidKms
     .map((km) => ({ km, eta: elapsedAtKm(km) }))
     .filter((s): s is { km: number; eta: number } => s.eta !== null);
@@ -1180,6 +1216,7 @@ function GpxUpload({
         hikeAbovePct / 100,
         terrainFactor,
         bucketMeters,
+        fadePctPerH / 100,
       );
       return {
         paceLabel: `${fmtPace(displaySec)}/${units === "imperial" ? "mi" : "km"}`,
@@ -1194,6 +1231,7 @@ function GpxUpload({
     hikeAbovePct,
     terrainFactor,
     bucketMeters,
+    fadePctPerH,
   ]);
 
   // Dwell-adjusted logistics. The engine and calibration stay on MOVING time
@@ -1243,6 +1281,42 @@ function GpxUpload({
         : { kind: "risk" as const, text: t.cutoffRiskLine(`R${i + 1}`, cutoffStr) },
     ];
   });
+
+  // Per-coordinate adjusted elapsed seconds (moving + dwell steps): the
+  // timeline the map replay animates along. One walk over 7k coords,
+  // memoized; the dot naturally pauses at each ravito because the timeline
+  // jumps by the dwell there.
+  const coordElapsed = useMemo(() => {
+    if (!track || !splits.length) return null;
+    const arr = new Array<number>(track.coords.length);
+    let sIdx = 0;
+    let prevEnd = 0;
+    let prevElapsed = 0;
+    for (let i = 0; i < track.coords.length; i++) {
+      const km = (i * 10) / 1000;
+      while (
+        sIdx < splits.length - 1 &&
+        km > prevEnd + splits[sIdx].distanceKm
+      ) {
+        prevEnd += splits[sIdx].distanceKm;
+        prevElapsed = splits[sIdx].elapsedSec;
+        sIdx++;
+      }
+      const moving =
+        prevElapsed + Math.max(0, km - prevEnd) * splits[sIdx].paceSecPerKm;
+      arr[i] = moving + dwellBefore(aidKms, km + 1e-6, dwellSec);
+    }
+    return arr;
+  }, [track, splits, aidKms, dwellSec]);
+  const replayLabelAt = (idx: number, tSec: number) =>
+    `${distStr((idx * 10) / 1000)} · ${fmtClockShort(tSec)}${clockAt(tSec) ? ` · ${clockAt(tSec)}` : ""}`;
+  const replay = coordElapsed
+    ? {
+        elapsedByCoord: coordElapsed,
+        finishSec: adjFinishSec,
+        labelAt: replayLabelAt,
+      }
+    : null;
 
   // Nutrition plan: hourly targets × each leg's projected duration, on the
   // DWELL-ADJUSTED clock (intake at the R1 stop fuels the R1→R2 leg, and a
@@ -1456,6 +1530,9 @@ function GpxUpload({
         },
         { label: t.gateLabel, value: `${hikeAbovePct}%` },
         { label: t.terrainLabel, value: `×${terrainFactor.toFixed(2)}` },
+        ...(fadePctPerH > 0
+          ? [{ label: t.fadeLabel, value: `${fadePctPerH}%/h` }]
+          : []),
         ...(aidStops.length && dwellSec > 0
           ? [{ label: t.dwellLabel, value: `${dwellMin} min` }]
           : []),
@@ -1551,6 +1628,8 @@ function GpxUpload({
       layersAria: t.mapLayersAria,
       locateLabel: t.mapLocate,
       locateError: t.mapLocateError,
+      replayLabel: t.replayLabel,
+      replayStop: t.replayStop,
       poiToggle: t.mapPoiToggle,
       poiHint: t.mapPoiHint,
       poiLoading: t.mapPoiLoading,
@@ -1776,6 +1855,16 @@ function GpxUpload({
                     setCalibrated(false); // hand-set = a guess again → wide band
                   }}
                 />
+                <SliderField
+                  label={t.fadeLabel}
+                  hint={t.fadeHint}
+                  display={fadePctPerH > 0 ? `${fadePctPerH}%/h` : "0"}
+                  value={fadePctPerH}
+                  min={0}
+                  max={FADE_MAX}
+                  step={0.5}
+                  onChange={setFadePctPerH}
+                />
               </div>
             </div>
           </div>
@@ -1818,7 +1907,7 @@ function GpxUpload({
             )}
             {calibFits.length > 0 && (
               <div className="mt-3 space-y-2">
-                {calibFits.map(({ run, factor, plausible }) => (
+                {calibFits.map(({ run, factor, plausible, weight }) => (
                   <div
                     key={run.id}
                     className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2 text-sm text-zinc-300 light:border-zinc-300 light:bg-zinc-100 light:text-zinc-700"
@@ -1837,6 +1926,9 @@ function GpxUpload({
                     <span className="text-zinc-500">
                       {distStr(run.dists[run.dists.length - 1] / 1000)} ·{" "}
                       {t.moving} {fmtClock(run.movingSec)}
+                      {run.dateMs !== null && (
+                        <> · {t.calibWeight(Math.round(weight * 100))}</>
+                      )}
                     </span>
                     <span
                       className={`ml-auto font-semibold tabular-nums ${
@@ -1924,6 +2016,7 @@ function GpxUpload({
                 poi={poi}
                 onPoiToggle={togglePoi}
                 labels={mapLabels}
+                replay={replay}
                 onRegisterHover={registerHoverTarget}
                 topRightSlot={
                   <button
@@ -1985,6 +2078,7 @@ function GpxUpload({
                       poi={poi}
                       onPoiToggle={togglePoi}
                       labels={mapLabels}
+                      replay={replay}
                       heightClass="h-full"
                     />
                   </Suspense>

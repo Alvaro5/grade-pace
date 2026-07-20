@@ -61,6 +61,12 @@ const en = {
   terrainLabel: "Terrain slowdown",
   terrainHint:
     "extra time for technical or rough ground (default ×1.04, measured on real trail runs). Best measured yourself: see “Calibrate from a real run”.",
+  fadeLabel: "Late-race fade",
+  fadeHint:
+    "extra slowdown per hour after hour 4, for tiredness (default 2%/h from ultra pacing studies). 0 = constant effort",
+  calibWeight: (pct: number) => `weight ${pct}%`,
+  replayLabel: "Replay the race",
+  replayStop: "Stop replay",
   calibTitle: "Calibrate from a real run",
   calibMeasure: "· measure your terrain factor",
   calibApplied: (factor: string) => `· applied ×${factor}`,
@@ -263,6 +269,12 @@ const fr: Messages = {
   terrainLabel: "Ralentissement terrain",
   terrainHint:
     "temps en plus pour terrain technique (défaut ×1,04, mesuré sur de vraies sorties). L'idéal : mesurez le vôtre, voir « Calibrer avec une vraie sortie ».",
+  fadeLabel: "Fatigue de fin de course",
+  fadeHint:
+    "ralentissement supplémentaire par heure après la 4e heure (défaut 2 %/h, d'après les études d'allure en ultra). 0 = effort constant",
+  calibWeight: (pct: number) => `poids ${pct}%`,
+  replayLabel: "Rejouer la course",
+  replayStop: "Arrêter",
   calibTitle: "Calibrer avec une vraie sortie",
   calibMeasure: "· mesurez votre facteur terrain",
   calibApplied: (factor: string) => `· appliqué ×${factor}`,
@@ -466,6 +478,12 @@ const es: Messages = {
   terrainLabel: "Penalización de terreno",
   terrainHint:
     "tiempo extra por terreno técnico (por defecto ×1,04, medido en salidas reales). Lo ideal: mídelo tú mismo, ver “Calibrar con una salida real”.",
+  fadeLabel: "Fatiga de final de carrera",
+  fadeHint:
+    "ralentización extra por hora después de la hora 4 (por defecto 2%/h, según estudios de ritmo en ultras). 0 = esfuerzo constante",
+  calibWeight: (pct: number) => `peso ${pct}%`,
+  replayLabel: "Reproducir la carrera",
+  replayStop: "Detener",
   calibTitle: "Calibrar con una salida real",
   calibMeasure: "· mide tu factor de terreno",
   calibApplied: (factor: string) => `· aplicado ×${factor}`,
@@ -669,6 +687,12 @@ const de: Messages = {
   terrainLabel: "Gelände-Faktor",
   terrainHint:
     "Zeitaufschlag für technisches Gelände (Standard ×1,04, auf echten Trailläufen gemessen). Am besten selbst messen: siehe „Mit einem echten Lauf kalibrieren“.",
+  fadeLabel: "Ermüdung im Rennverlauf",
+  fadeHint:
+    "zusätzliche Verlangsamung pro Stunde nach Stunde 4 (Standard 2 %/h, aus Ultra-Pacing-Studien). 0 = konstante Leistung",
+  calibWeight: (pct: number) => `Gewicht ${pct}%`,
+  replayLabel: "Rennen abspielen",
+  replayStop: "Stoppen",
   calibTitle: "Mit einem echten Lauf kalibrieren",
   calibMeasure: "· miss deinen Gelände-Faktor",
   calibApplied: (factor: string) => `· angewendet ×${factor}`,
@@ -873,6 +897,12 @@ const it: Messages = {
   terrainLabel: "Fattore terreno",
   terrainHint:
     "tempo extra per terreno tecnico (predefinito ×1,04, misurato su uscite reali). L'ideale: misuralo tu stesso, vedi “Calibra con un'uscita reale”.",
+  fadeLabel: "Calo di fine gara",
+  fadeHint:
+    "rallentamento extra all'ora dopo la 4a ora (predefinito 2%/h, dagli studi sul ritmo negli ultra). 0 = sforzo costante",
+  calibWeight: (pct: number) => `peso ${pct}%`,
+  replayLabel: "Riproduci la gara",
+  replayStop: "Ferma",
   calibTitle: "Calibra con un'uscita reale",
   calibMeasure: "· misura il tuo fattore terreno",
   calibApplied: (factor: string) => `· applicato ×${factor}`,

@@ -63,3 +63,23 @@ test("POI toggle fetches and pins points of interest", async ({ page }) => {
     expect(await markers.count()).toBeGreaterThan(before);
   }).toPass({ timeout: 15_000 });
 });
+
+test("race replay animates a dot with a live readout", async ({ page }) => {
+  await page.goto("/#rav=17,33,47&st=8:00");
+  await expect(page.getByText("Projected finish")).toBeVisible();
+  await expect(page.getByLabel("Map style")).toBeVisible();
+  await page.getByRole("button", { name: /Replay the race/ }).click();
+  // The readout chip fills and advances as the dot runs the course.
+  const readout = page
+    .locator("span.tabular-nums", { hasText: /km|mi/ })
+    .first();
+  await expect(readout).toBeVisible();
+  const t1 = await readout.textContent();
+  await page.waitForTimeout(2500);
+  const t2 = await readout.textContent();
+  expect(t1).toMatch(/km|mi/); // en-US locale renders miles
+  expect(t2).not.toBe(t1); // it moved
+  // Wall-clock present because a start time is set.
+  expect(t2).toMatch(/\d{2}:\d{2}/);
+  await page.getByRole("button", { name: /Stop replay/ }).click();
+});

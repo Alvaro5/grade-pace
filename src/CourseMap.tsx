@@ -32,6 +32,8 @@ export type CourseMapLabels = {
   layersAria: string;
   locateLabel: string;
   locateError: string;
+  replayLabel: string;
+  replayStop: string;
   poiToggle: string;
   poiHint: string;
   poiLoading: string;
@@ -137,6 +139,7 @@ export default function CourseMap({
   poi = null,
   onPoiToggle,
   labels,
+  replay = null,
   topRightSlot,
   onRegisterHover,
 }: {
@@ -154,6 +157,14 @@ export default function CourseMap({
   poi?: PoiState | null;
   onPoiToggle?: () => void;
   labels?: CourseMapLabels;
+  // Race replay: a per-coordinate elapsed-seconds timeline (dwell steps
+  // included, so the dot pauses at ravitos) plus a readout formatter. The
+  // animation itself is fully imperative rAF inside this component.
+  replay?: {
+    elapsedByCoord: number[];
+    finishSec: number;
+    labelAt: (coordIdx: number, tSec: number) => string;
+  } | null;
   // Extra control rendered at the top of the floating stack — the inline
   // instance puts its expand button here so all map controls share one home.
   topRightSlot?: ReactNode;
@@ -172,6 +183,10 @@ export default function CourseMap({
   const locateRef = useRef<L.LayerGroup | null>(null);
   const hoverRef = useRef<L.CircleMarker | null>(null);
   const [locateMsg, setLocateMsg] = useState("");
+  const [replaying, setReplaying] = useState(false);
+  const replayRaf = useRef(0);
+  const replayMarkerRef = useRef<L.CircleMarker | null>(null);
+  const replayReadoutRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -196,6 +211,8 @@ export default function CourseMap({
       kmMarksRef.current = null;
       locateRef.current = null;
       hoverRef.current = null;
+      cancelAnimationFrame(replayRaf.current);
+      replayMarkerRef.current = null;
     };
   }, []);
 
@@ -407,6 +424,68 @@ export default function CourseMap({
     );
   }
 
+  // ~25 s of animation whatever the race length: long enough to read, short
+  // enough to hold attention.
+  const REPLAY_MS = 25_000;
+
+  function stopReplay() {
+    cancelAnimationFrame(replayRaf.current);
+    replayMarkerRef.current?.remove();
+    replayMarkerRef.current = null;
+    setReplaying(false);
+  }
+
+  function startReplay() {
+    const map = mapRef.current;
+    if (!map || !replay || coords.length < 2) return;
+    stopReplay();
+    setReplaying(true);
+    const { elapsedByCoord, finishSec, labelAt } = replay;
+    const marker = L.circleMarker([coords[0].lat, coords[0].lon], {
+      radius: 8,
+      color: "#ffffff",
+      weight: 2.5,
+      fillColor: "#10b981",
+      fillOpacity: 1,
+      interactive: false,
+    }).addTo(map);
+    replayMarkerRef.current = marker;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      // The component may have re-rendered; the captured timeline stays
+      // valid because the parent memoizes it per plan.
+      const frac = Math.min(1, (now - t0) / REPLAY_MS);
+      const tSec = frac * finishSec;
+      let lo = 0;
+      let hi = elapsedByCoord.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (elapsedByCoord[mid] < tSec) lo = mid + 1;
+        else hi = mid;
+      }
+      marker.setLatLng([coords[lo].lat, coords[lo].lon]);
+      if (replayReadoutRef.current)
+        replayReadoutRef.current.textContent = labelAt(lo, tSec);
+      if (frac < 1) {
+        replayRaf.current = requestAnimationFrame(step);
+      } else {
+        // Linger on the finish readout for a beat, then clean up.
+        window.setTimeout(() => {
+          if (replayMarkerRef.current === marker) stopReplay();
+        }, 2000);
+      }
+    };
+    replayRaf.current = requestAnimationFrame(step);
+  }
+
+  // A new course invalidates a running replay.
+  useEffect(() => {
+    cancelAnimationFrame(replayRaf.current);
+    replayMarkerRef.current?.remove();
+    replayMarkerRef.current = null;
+    setReplaying(false);
+  }, [coords]);
+
   // Hover mirror: register a marker-mover with the parent. One reusable
   // marker, moved rather than recreated — this runs at pointer-move
   // frequency, entirely outside React's render loop.
@@ -520,6 +599,22 @@ export default function CourseMap({
               <path d="M12 2v3m0 14v3M2 12h3m14 0h3" />
             </svg>
           </button>
+        )}
+        {labels && replay && (
+          <button
+            type="button"
+            onClick={replaying ? stopReplay : startReplay}
+            aria-pressed={replaying}
+            className={`${chipClass} ${replaying ? "border-emerald-500 text-emerald-400 light:text-emerald-700" : ""}`}
+          >
+            {replaying ? `■ ${labels.replayStop}` : `▶ ${labels.replayLabel}`}
+          </button>
+        )}
+        {replaying && (
+          <span
+            ref={replayReadoutRef}
+            className="rounded-md border border-emerald-600/50 bg-zinc-900/85 px-2.5 py-1 text-xs font-medium tabular-nums text-emerald-300 shadow-sm backdrop-blur light:bg-white/90 light:text-emerald-700"
+          />
         )}
         {locateMsg && (
           <span className="max-w-56 rounded-md border border-amber-500/40 bg-zinc-900/85 px-2.5 py-1 text-right text-xs text-amber-300 shadow-sm backdrop-blur light:bg-white/90 light:text-amber-700">
