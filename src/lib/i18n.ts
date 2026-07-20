@@ -7,18 +7,27 @@
 // colons, commas or parentheses instead. En dashes stay ONLY inside numeric
 // ranges ("60–90 g/h", "7:00 – 8:15") where they are standard typography.
 
-export type Lang = "en" | "fr" | "es";
+export type Lang = "en" | "fr" | "es" | "de" | "it";
 
 export function initialLang(): Lang {
   try {
     const saved = localStorage.getItem("gp-lang");
-    if (saved === "en" || saved === "fr" || saved === "es") return saved;
+    if (
+      saved === "en" ||
+      saved === "fr" ||
+      saved === "es" ||
+      saved === "de" ||
+      saved === "it"
+    )
+      return saved;
   } catch {
     /* storage unavailable — fall through to the locale default */
   }
   const nav = navigator.language?.toLowerCase() ?? "";
   if (nav.startsWith("fr")) return "fr";
   if (nav.startsWith("es")) return "es";
+  if (nav.startsWith("de")) return "de";
+  if (nav.startsWith("it")) return "it";
   return "en";
 }
 
@@ -628,4 +637,412 @@ const es: Messages = {
   howMore: "Metodología completa y código en GitHub",
 };
 
-export const MESSAGES: Record<Lang, Messages> = { en, fr, es };
+const de: Messages = {
+  tagline:
+    "Die meisten Pace-Planer nehmen an, dass du jeden Anstieg läufst. Tust du nicht. GradePace plant auch die Gehpassagen, direkt aus dem GPX deiner Strecke.",
+  dropHint:
+    "Oder ziehe eine .gpx-Datei irgendwo hinein. Wird im Browser analysiert, nie hochgeladen.",
+  uploadCourseAria: "GPX-Datei der Strecke hochladen",
+  exampleBadge: "Beispiel",
+  exampleImperial:
+    "Imperial Trail, Fontainebleau (70 km). Lade deine eigene Strecke, um dein Rennen zu planen.",
+  exampleBosses:
+    "25 Bosses, Fontainebleau: 15 km Sandsteinmauern, das Schaufenster des Power-Hikings.",
+  loadImperial: "Imperial Trail (70 km)",
+  loadBosses: "25 Bosses (steil)",
+  yourPace: "Dein Tempo",
+  unitsLabel: "Einheiten",
+  paceLabel: "Dein lockeres Tempo in der Ebene",
+  paceHintMetric: "min/km, ein Tempo, das du stundenlang flach halten kannst",
+  paceHintImperial:
+    "min/Meile, ein Tempo, das du stundenlang flach halten kannst",
+  paceInvalid: (example: string, current: string) =>
+    `Gib ein Tempo wie ${example} ein. Bis dahin gilt ${current}.`,
+  advanced: "Erweiterte Einstellungen",
+  vamLabel: "Steiggeschwindigkeit beim Gehen",
+  vamHintMetric:
+    "wie schnell du beim Power-Hiken steigst, in Höhenmetern pro Stunde",
+  vamHintImperial:
+    "wie schnell du beim Power-Hiken steigst, in vertikalen Fuß pro Stunde",
+  gateLabel: "Gehen ab einer Steigung von",
+  gateHint: "oberhalb dieser Steigung geht der Plan statt zu laufen",
+  terrainLabel: "Gelände-Faktor",
+  terrainHint:
+    "Zeitaufschlag für technisches Gelände (Standard ×1,04, auf echten Trailläufen gemessen). Am besten selbst messen: siehe „Mit einem echten Lauf kalibrieren“.",
+  calibTitle: "Mit einem echten Lauf kalibrieren",
+  calibMeasure: "· miss deinen Gelände-Faktor",
+  calibApplied: (factor: string) => `· angewendet ×${factor}`,
+  calibIntro:
+    "Lade einen oder mehrere aufgezeichnete Läufe (mit Zeitstempeln) hoch. Jeder wird mit dem Modell verglichen, Pausen herausgefiltert, um deinen persönlichen Gelände-Faktor zu messen. Ein Lauf = ein Tag; mehrere Läufe stabilisieren die Messung.",
+  calibUploadAria: "Aufgezeichnete Läufe (GPX) zur Kalibrierung hochladen",
+  calibNoTime: (file: string) =>
+    `${file}: keine Zeitstempel, sieht nach einer geplanten Route aus. Exportiere stattdessen die aufgezeichnete Aktivität (Strava, Garmin, COROS…).`,
+  calibUnreadable: (file: string) => `${file}: Datei konnte nicht gelesen werden.`,
+  moving: "in Bewegung",
+  implausible:
+    "unplausibel, daher vom Median ausgeschlossen. Route mit geschätzten Zeiten? Referenztempo an dem Tag weit daneben?",
+  removeRun: (file: string) => `${file} entfernen`,
+  useFactor: (factor: string) => `×${factor} verwenden`,
+  medianOfRuns: (n: number) => ` (Median aus ${n} Läufen)`,
+  forThisPlan: " für diesen Plan",
+  spread: "Spanne",
+  expandChart: "Vergrößern",
+  closeChart: "Schließen",
+  legendDescent: "Abstieg",
+  legendRunnable: "laufbar",
+  legendClimb: "Anstieg",
+  legendPowerHike: "Power-Hike",
+  elevationWord: "Höhe",
+  powerHikeWord: "Power-Hike",
+  chartDplusLeft: "HM übrig",
+  statDistance: "Distanz",
+  statGain: "Höhenmeter",
+  statHike: "Power-Hike",
+  statFinish: "Zielzeit (Prognose)",
+  walkedPct: (pct: string) => `${pct}% der Strecke gehend`,
+  expect: "rechne mit",
+  calibratedTag: "· kalibriert",
+  rangeNote:
+    "Eine Spanne, kein Versprechen: die Tagesform verschiebt ein langes Rennen um 20 bis 40 min. Kalibrieren macht sie enger.",
+  sensitivityLabel: "Mit einem anderen Grundtempo:",
+  courseNamePlaceholder: "Streckenname",
+  courseNameAria: "Streckenname für das geteilte Bild",
+  shareImage: "Bild teilen",
+  creatingImage: "Wird erstellt…",
+  copyLink: "Link kopieren",
+  copied: "Kopiert",
+  shareText: (title: string) =>
+    `Mein ${title}-Rennplan, erstellt mit GradePace`,
+  shareFailed: "Bild konnte nicht erstellt werden. Bitte erneut versuchen.",
+  copyFallback:
+    "Automatisches Kopieren fehlgeschlagen. Der Link steht jetzt in der Adressleiste.",
+  racePlan: "Rennplan",
+  thGrade: "Steigung",
+  thDplus: "HM+",
+  thHike: "gehen",
+  thPace: "Tempo",
+  thElapsed: "gesamt",
+  showAll: (n: number) => `Alle ${n} Abschnitte anzeigen`,
+  showFewer: "Weniger anzeigen",
+  errInvalid:
+    "Diese Datei ist kein gültiges GPX: sie ließ sich nicht als XML lesen. Prüfe, ob du eine .gpx-Datei exportiert hast.",
+  errNoTrack:
+    "Diese Datei enthält weder Track noch Route: nichts zu planen.",
+  errTooFew:
+    "Dieser Track hat zu wenige Punkte für einen Plan (mindestens zwei nötig).",
+  errNoElevation:
+    "Diese Datei hat keine Höhendaten, eine Anpassung an die Steigung ist unmöglich. Exportiere das GPX mit Höhe; die meisten Tools bieten das an.",
+  errGeneric: "Datei konnte nicht gelesen werden. Versuche ein anderes GPX.",
+  errExample:
+    "Beispielstrecke konnte nicht geladen werden. Bitte erneut versuchen.",
+  errNotGpx: "Das sieht nicht nach einer .gpx-Datei aus. Ziehe einen GPX-Export hinein.",
+  footerBuiltBy: "Erstellt von",
+  footerTraining:
+    "während des Trainings für den Imperial Trail 70k, Fontainebleau.",
+  footerOpenSource: "Open Source auf GitHub",
+  themeToLight: "Zum hellen Modus wechseln",
+  themeToDark: "Zum dunklen Modus wechseln",
+  uploadCourse: "GPX hochladen",
+  calibAdd: "Läufe hinzufügen",
+  aidLabel: "Verpflegungspunkte",
+  aidPlaceholder: "z. B. 17, 33, 47",
+  mapStart: "Start",
+  mapFinish: "Ziel",
+  mapAria: "Streckenkarte",
+  mapLayersAria: "Kartenstil",
+  mapLocate: "Meine Position anzeigen",
+  mapLocateError:
+    "Position nicht verfügbar. Standortzugriff erlauben und erneut versuchen.",
+  mapLayerTerrain: "Gelände",
+  mapLayerStandard: "Standard",
+  mapLayerSatellite: "Satellit",
+  mapLayerHybrid: "Hybrid",
+  mapPoiToggle: "Points of Interest",
+  mapPoiHint:
+    "Wasser, Toiletten, Aussichtspunkte, Cafés und mehr aus OpenStreetMap. Es wird nur das Streckengebiet (ein Rechteck) gesendet, nie dein Track.",
+  mapPoiLoading: "Lädt…",
+  mapPoiError:
+    "Points of Interest konnten nicht geladen werden. Zum Wiederholen erneut aktivieren.",
+  mapPoiTooBig: "Streckengebiet zu groß für Points of Interest.",
+  mapPoiEmpty: "Keine Points of Interest nahe dieser Strecke kartiert.",
+  poiWater: "Trinkwasser",
+  poiToilets: "Toiletten",
+  poiViewpoint: "Aussichtspunkt",
+  poiCafe: "Café",
+  poiSpring: "Quelle",
+  poiShelter: "Schutzhütte",
+  poiParking: "Parkplatz",
+  poiPicnic: "Picknickplatz",
+  nutritionTitle: "Ernährungsplan",
+  nutritionSubtitle: "· Kohlenhydrate, Flüssigkeit, Natrium pro Abschnitt",
+  nutritionIntro:
+    "Stundenziele, angewendet auf jeden Abschnitt deines Plans (ein Abschnitt ist die Strecke zwischen zwei Verpflegungspunkten): das nimmst du dort mit und zu dir. Die Mengen folgen der prognostizierten Zeit, nicht der Distanz.",
+  nutritionNoStations:
+    "Trage deine Verpflegungspunkte im Feld unter dem Höhenprofil ein, dann teilt sich diese Tabelle in eine Zeile pro Abschnitt, jede mit eigenen Mengen.",
+  carbsLabel: "Kohlenhydrate",
+  carbsHint:
+    "g pro Stunde. 60–90 g/h ist der Ultra-Bereich; über 90 braucht einen trainierten Magen",
+  fluidLabel: "Flüssigkeit",
+  fluidHint: "ml pro Stunde. Bei Hitze mehr, bei Kälte weniger",
+  sodiumLabel: "Natrium",
+  sodiumHint:
+    "mg Natrium pro Stunde (1 g Salz ≈ 390 mg Natrium). Salzige Schwitzer brauchen mehr",
+  caffeineLabel: "Koffein",
+  caffeineHint:
+    "mg pro Stunde, 0 = aus. Heb es für die zweite Hälfte auf; Gesamtmenge moderat halten (3 bis 6 mg pro kg)",
+  colCaffeine: "Koffein",
+  legLabel: "Abschnitt",
+  colDuration: "Zeit",
+  colCarbs: "KH",
+  colFluid: "Flüssigkeit",
+  colSodium: "Natrium",
+  colKcal: "kcal",
+  nutritionTotal: "Gesamt",
+  gelsHint: (n: number) =>
+    `≈ ${n} Gels über das Rennen (je 25 g Kohlenhydrate). Nach Geschmack mit Getränken, Riegeln und fester Nahrung mischen.`,
+  nutritionDisclaimer:
+    "Allgemeine Richtwerte, keine medizinische Beratung. Trainiere deine Rennverpflegung auf langen Läufen.",
+  exportSheet: "PDF exportieren",
+  exportGpx: "Uhr-GPX",
+  popupBlocked:
+    "Export-Ansicht konnte nicht geöffnet werden. Erlaube Pop-ups für diese Seite und versuche es erneut.",
+  sheetSettings: "Einstellungen",
+  sheetEta: "Durchgang",
+  sheetSplitsTitle: "Tempotabelle",
+  sheetFooter: (host: string) => `Erstellt mit GradePace · ${host}`,
+  dwellLabel: "Standzeit",
+  dwellHint:
+    "Minuten, die an jedem Verpflegungspunkt verloren gehen (Auffüllen, Essen, Schlange). Wird allen späteren Zeiten zugerechnet.",
+  startLabel: "Start",
+  startInvalid: "Gib eine Startzeit wie 8:00 ein (24 h).",
+  finishClock: (clock: string) => `Ziel ≈ ${clock}`,
+  cutoffLabel: "Cut-offs",
+  cutoffPlaceholder: "z. B. 5:30, 8:00",
+  cutoffHint:
+    "Karenzzeiten als verstrichene Rennzeit (H:MM), eine pro Verpflegungspunkt in Streckenreihenfolge",
+  cutoffMissLine: (station: string, arr: string, cutoff: string) =>
+    `${station}: prognostizierte Ankunft ${arr}, nach dem Cut-off von ${cutoff}.`,
+  cutoffRiskLine: (station: string, cutoff: string) =>
+    `${station}: das langsame Ende deiner Spanne reißt den Cut-off von ${cutoff}.`,
+  chipArrDep: (arr: string, dep: string) => `Ankunft ${arr}, Abfahrt ${dep}`,
+  sheetDepart: "Abfahrt",
+  sheetCutoff: "Cut-off",
+  savedBadge: "Gespeichert",
+  savedNote:
+    "Dein Plan wird auf diesem Gerät gespeichert und beim nächsten Besuch wiederhergestellt.",
+  savedForget: "Diesen Plan vergessen",
+  howTitle: "So funktioniert es",
+  howSubtitle: "· das Modell hinter dem Plan",
+  howModel:
+    "Das Tempo kommt aus der Physik, nicht aus dem Bauchgefühl: die Minetti-Energiekostenkurve (im Labor gemessen) bepreist jede Steigung, verankert durch dein lockeres Flachtempo. Oberhalb der Geh-Schwelle wechselt der Plan zum Power-Hiken mit deiner Steiggeschwindigkeit, weil Laufen dort nicht mehr die effiziente Option ist.",
+  howCalib:
+    "Der Gelände-Faktor wird gemessen, nicht geraten: lade einen aufgezeichneten Lauf hoch und GradePace invertiert sein eigenes Modell darauf, Pausen herausgefiltert. Mehrere Läufe stabilisieren die Messung.",
+  howRange:
+    "Die Zielzeit ist absichtlich eine Spanne. Die Tagesbedingungen (Schlaf, Hitze, Verpflegung) verschieben ein langes Rennen um 20 bis 40 Minuten; eine sekundengenaue Prognose wäre Theater. Kalibrieren macht die Spanne enger.",
+  howMore: "Vollständige Methodik und Quellcode auf GitHub",
+};
+
+const it: Messages = {
+  tagline:
+    "La maggior parte dei pianificatori di ritmo presume che tu corra ogni salita. In realtà no. GradePace pianifica anche i tratti di camminata, dal GPX del tuo percorso.",
+  dropHint:
+    "Oppure trascina un .gpx ovunque. Analizzato nel tuo browser, mai caricato.",
+  uploadCourseAria: "Carica un file GPX del percorso",
+  exampleBadge: "Esempio",
+  exampleImperial:
+    "Imperial Trail, Fontainebleau (70 km). Carica il tuo per pianificare la tua gara.",
+  exampleBosses:
+    "25 Bosses, Fontainebleau: 15 km di muri di arenaria, la vetrina della camminata veloce.",
+  loadImperial: "Imperial Trail (70 km)",
+  loadBosses: "25 Bosses (ripido)",
+  yourPace: "Il tuo ritmo",
+  unitsLabel: "Unità",
+  paceLabel: "Il tuo ritmo facile in piano",
+  paceHintMetric: "min/km, un ritmo sostenibile per ore in piano",
+  paceHintImperial: "min/miglio, un ritmo sostenibile per ore in piano",
+  paceInvalid: (example: string, current: string) =>
+    `Inserisci un ritmo come ${example}. Nel frattempo resta ${current}.`,
+  advanced: "Impostazioni avanzate",
+  vamLabel: "Velocità di salita camminando",
+  vamHintMetric:
+    "quanto sali durante la camminata veloce, in metri verticali all'ora",
+  vamHintImperial:
+    "quanto sali durante la camminata veloce, in piedi verticali all'ora",
+  gateLabel: "Cammina oltre una pendenza di",
+  gateHint: "oltre questa pendenza, il piano cammina invece di correre",
+  terrainLabel: "Fattore terreno",
+  terrainHint:
+    "tempo extra per terreno tecnico (predefinito ×1,04, misurato su uscite reali). L'ideale: misuralo tu stesso, vedi “Calibra con un'uscita reale”.",
+  calibTitle: "Calibra con un'uscita reale",
+  calibMeasure: "· misura il tuo fattore terreno",
+  calibApplied: (factor: string) => `· applicato ×${factor}`,
+  calibIntro:
+    "Carica una o più uscite registrate (con marcatura temporale). Ognuna viene confrontata col modello, soste filtrate, per misurare il tuo fattore terreno personale. Un'uscita = un giorno; più uscite stabilizzano la misura.",
+  calibUploadAria: "Carica uscite registrate (GPX) per la calibrazione",
+  calibNoTime: (file: string) =>
+    `${file}: nessuna marcatura temporale, sembra un percorso pianificato. Esporta invece l'attività registrata (Strava, Garmin, COROS…).`,
+  calibUnreadable: (file: string) => `${file}: impossibile leggere il file.`,
+  moving: "in movimento",
+  implausible:
+    "inverosimile, quindi escluso dalla mediana. Percorso con tempi stimati? Ritmo di riferimento molto diverso quel giorno?",
+  removeRun: (file: string) => `Rimuovi ${file}`,
+  useFactor: (factor: string) => `Usa ×${factor}`,
+  medianOfRuns: (n: number) => ` (mediana di ${n} uscite)`,
+  forThisPlan: " per questo piano",
+  spread: "intervallo",
+  expandChart: "Ingrandisci",
+  closeChart: "Chiudi",
+  legendDescent: "discesa",
+  legendRunnable: "corribile",
+  legendClimb: "salita",
+  legendPowerHike: "camminata veloce",
+  elevationWord: "quota",
+  powerHikeWord: "camminata",
+  chartDplusLeft: "D+ rimanente",
+  statDistance: "Distanza",
+  statGain: "Dislivello positivo",
+  statHike: "Camminata veloce",
+  statFinish: "Arrivo previsto",
+  walkedPct: (pct: string) => `${pct}% del percorso camminando`,
+  expect: "conta su",
+  calibratedTag: "· calibrato",
+  rangeNote:
+    "Una forchetta, non una promessa: le condizioni del giorno spostano una gara lunga di 20-40 min. Calibrare la restringe.",
+  sensitivityLabel: "Con un altro ritmo base:",
+  courseNamePlaceholder: "Nome del percorso",
+  courseNameAria: "Nome del percorso per l'immagine condivisa",
+  shareImage: "Condividi immagine",
+  creatingImage: "Creazione…",
+  copyLink: "Copia link",
+  copied: "Copiato",
+  shareText: (title: string) =>
+    `Il mio piano gara ${title}, creato con GradePace`,
+  shareFailed: "Impossibile creare l'immagine. Riprova.",
+  copyFallback:
+    "Copia automatica non riuscita. Il link è nella barra degli indirizzi.",
+  racePlan: "Piano gara",
+  thGrade: "pendenza",
+  thDplus: "D+",
+  thHike: "camminata",
+  thPace: "ritmo",
+  thElapsed: "totale",
+  showAll: (n: number) => `Mostra tutti i ${n} tratti`,
+  showFewer: "Mostra meno",
+  errInvalid:
+    "Questo file non è un GPX valido: impossibile leggerlo come XML. Verifica di aver esportato un file .gpx.",
+  errNoTrack:
+    "Questo file non contiene né traccia né percorso: niente da pianificare.",
+  errTooFew:
+    "Questa traccia ha troppo pochi punti per costruire un piano (ne servono almeno due).",
+  errNoElevation:
+    "Questo file non ha dati di quota, impossibile adattare alla pendenza. Riesporta il GPX con la quota; la maggior parte degli strumenti lo consente.",
+  errGeneric: "Impossibile leggere questo file. Prova un altro GPX.",
+  errExample: "Impossibile caricare il percorso di esempio. Riprova.",
+  errNotGpx: "Non sembra un file .gpx. Trascina un'esportazione GPX.",
+  footerBuiltBy: "Creato da",
+  footerTraining:
+    "mentre si allena per l'Imperial Trail 70k, Fontainebleau.",
+  footerOpenSource: "Open source su GitHub",
+  themeToLight: "Passa alla modalità chiara",
+  themeToDark: "Passa alla modalità scura",
+  uploadCourse: "Carica GPX",
+  calibAdd: "Aggiungi uscite",
+  aidLabel: "Ristori",
+  aidPlaceholder: "es. 17, 33, 47",
+  mapStart: "Partenza",
+  mapFinish: "Arrivo",
+  mapAria: "Mappa del percorso",
+  mapLayersAria: "Stile mappa",
+  mapLocate: "Mostra la mia posizione",
+  mapLocateError:
+    "Posizione non disponibile. Consenti l'accesso alla posizione e riprova.",
+  mapLayerTerrain: "Terreno",
+  mapLayerStandard: "Standard",
+  mapLayerSatellite: "Satellite",
+  mapLayerHybrid: "Ibrida",
+  mapPoiToggle: "Punti di interesse",
+  mapPoiHint:
+    "Acqua, bagni, punti panoramici, caffè e altro da OpenStreetMap. Viene inviata solo la zona del percorso (un rettangolo), mai la tua traccia.",
+  mapPoiLoading: "Caricamento…",
+  mapPoiError:
+    "Impossibile caricare i punti di interesse. Riattiva per riprovare.",
+  mapPoiTooBig: "Zona del percorso troppo estesa per i punti di interesse.",
+  mapPoiEmpty: "Nessun punto di interesse mappato vicino a questo percorso.",
+  poiWater: "acqua potabile",
+  poiToilets: "bagni",
+  poiViewpoint: "punto panoramico",
+  poiCafe: "caffè",
+  poiSpring: "sorgente",
+  poiShelter: "rifugio",
+  poiParking: "parcheggio",
+  poiPicnic: "area picnic",
+  nutritionTitle: "Piano nutrizionale",
+  nutritionSubtitle: "· carboidrati, liquidi, sodio per tratto",
+  nutritionIntro:
+    "Obiettivi orari applicati a ogni tratto del piano (un tratto è la sezione tra due ristori): ecco cosa portare e consumare su ciascuno. Le quantità seguono il tempo previsto, non la distanza.",
+  nutritionNoStations:
+    "Aggiungi i tuoi ristori nel campo sotto il profilo altimetrico e questa tabella si divide in una riga per tratto tra ristori, ognuna con le sue quantità.",
+  carbsLabel: "Carboidrati",
+  carbsHint:
+    "g all'ora. 60–90 g/h è il range ultra; oltre 90 serve uno stomaco allenato",
+  fluidLabel: "Liquidi",
+  fluidHint: "ml all'ora. Di più col caldo, meno col freddo",
+  sodiumLabel: "Sodio",
+  sodiumHint:
+    "mg di sodio all'ora (1 g di sale ≈ 390 mg di sodio). Chi suda salato ne ha più bisogno",
+  caffeineLabel: "Caffeina",
+  caffeineHint:
+    "mg all'ora, 0 = disattivata. Riservala alla seconda metà; totale moderato in gara (3-6 mg per kg)",
+  colCaffeine: "caffeina",
+  legLabel: "tratto",
+  colDuration: "tempo",
+  colCarbs: "carbo",
+  colFluid: "liquidi",
+  colSodium: "sodio",
+  colKcal: "kcal",
+  nutritionTotal: "Totale",
+  gelsHint: (n: number) =>
+    `≈ ${n} gel in gara (25 g di carboidrati ciascuno). Da combinare con bevande, barrette e cibo solido a piacere.`,
+  nutritionDisclaimer:
+    "Indicazioni generali, non un parere medico. Allena la tua nutrizione di gara nei lunghi.",
+  exportSheet: "Esporta PDF",
+  exportGpx: "GPX orologio",
+  popupBlocked:
+    "Impossibile aprire la vista di esportazione. Consenti i pop-up per questo sito e riprova.",
+  sheetSettings: "Impostazioni",
+  sheetEta: "passaggio",
+  sheetSplitsTitle: "Tabella dei ritmi",
+  sheetFooter: (host: string) => `Creato con GradePace · ${host}`,
+  dwellLabel: "Tempo di sosta",
+  dwellHint:
+    "Minuti persi a ogni ristoro (rifornimento, cibo, coda). Aggiunti a tutti i tempi successivi.",
+  startLabel: "Partenza",
+  startInvalid: "Inserisci un orario di partenza come 8:00 (24 h).",
+  finishClock: (clock: string) => `arrivo ≈ ${clock}`,
+  cutoffLabel: "Cancelli",
+  cutoffPlaceholder: "es. 5:30, 8:00",
+  cutoffHint:
+    "cancelli orari come tempo di gara trascorso (H:MM), uno per ristoro in ordine di percorso",
+  cutoffMissLine: (station: string, arr: string, cutoff: string) =>
+    `${station}: arrivo previsto ${arr}, dopo il cancello delle ${cutoff}.`,
+  cutoffRiskLine: (station: string, cutoff: string) =>
+    `${station}: l'estremo lento della tua forchetta supera il cancello delle ${cutoff}.`,
+  chipArrDep: (arr: string, dep: string) => `arrivo ${arr}, ripartenza ${dep}`,
+  sheetDepart: "ripartenza",
+  sheetCutoff: "cancello",
+  savedBadge: "Salvato",
+  savedNote:
+    "Il tuo piano è salvato su questo dispositivo e ripristinato alla prossima visita.",
+  savedForget: "Dimentica questo piano",
+  howTitle: "Come funziona",
+  howSubtitle: "· il modello dietro il piano",
+  howModel:
+    "Il ritmo viene dalla fisica, non dalle sensazioni: la curva del costo energetico di Minetti (misurata in laboratorio) dà un prezzo a ogni pendenza, ancorata al tuo ritmo facile in piano. Oltre la soglia di camminata il piano passa alla camminata veloce alla tua velocità verticale, perché a quella pendenza correre smette di essere l'opzione efficiente.",
+  howCalib:
+    "Il fattore terreno si misura, non si indovina: carica un'uscita registrata e GradePace inverte il proprio modello su di essa, soste filtrate. Più uscite stabilizzano la misura.",
+  howRange:
+    "L'arrivo è una forchetta di proposito. Le condizioni del giorno (sonno, caldo, alimentazione) spostano una gara lunga di 20-40 minuti; una previsione al secondo sarebbe teatro. Calibrare restringe la forchetta.",
+  howMore: "Metodologia completa e codice su GitHub",
+};
+
+export const MESSAGES: Record<Lang, Messages> = { en, fr, es, de, it };

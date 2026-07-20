@@ -660,6 +660,19 @@
     are gone with it. Verified: tooltip values, hover bridge, tick niceness
     (1/2/2.5/5 steps), e2e suite green, visual parity in the browser.
 
+- **Five languages + offline-first PWA + e2e in CI (post-merge round).**
+  German and Italian join EN/FR/ES (full typed tables, DACH/IT trail
+  vocabulary: Verpflegungspunkte, Cut-offs, ristori, cancelli; de-DE/it-IT
+  number formats; browser detection; the language toggle became a compact
+  select at five entries). The example courses are now precached (~570 kB)
+  so a FIRST offline open shows the full dashboard and a new plan can be
+  built offline from a local GPX (previously offline needed a prior plan).
+  The CI workflow (merged via PR #2) gained an e2e job running the
+  Playwright smoke against the real preview build. README post-merge
+  fact-check: the owner's conflict resolution was good; fixed the three
+  stale spots (Recharts in Tech, old POI list, export sentence now
+  mentioning the watch GPX and languages).
+
 ## Next
 - **Owner-gated** (explicitly deferred, do not start without a decision):
   fatigue-fade model (needs a second calibration point; never fit terrain +
@@ -672,7 +685,7 @@
 - e2e in CI: once PR #2 (CI workflow) merges, add `npm run e2e` as a job
   (needs `npx playwright install chromium` in the workflow).
 - Ideas parked: per-station dwell overrides; caffeine back-half weighting;
-  fullscreen-map hover sync; more languages (DE/IT).
+  fullscreen-map hover sync.
 
 - **Final autonomy hour (owner: "anything more?").**
   - *Watch GPX export* (`src/lib/planGpx.ts`, +4 tests): the course as a

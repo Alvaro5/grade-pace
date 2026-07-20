@@ -759,8 +759,7 @@ function GpxUpload({
 
   // Display helpers for the active unit — data underneath stays metric.
   // Thousands separators follow the UI language (1,193 ft / 1 193 ft).
-  const numLocale =
-    lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US";
+  const numLocale = { en: "en-US", fr: "fr-FR", es: "es-ES", de: "de-DE", it: "it-IT" }[lang];
   const distStr = (km: number) =>
     units === "imperial"
       ? `${(km / KM_PER_MI).toFixed(2)} mi`
@@ -1830,7 +1829,7 @@ function GpxUpload({
                     {run.dateMs !== null && (
                       <span className="text-zinc-500">
                         {new Date(run.dateMs).toLocaleDateString(
-                          lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US",
+                          { en: "en-US", fr: "fr-FR", es: "es-ES", de: "de-DE", it: "it-IT" }[lang],
                           { year: "numeric", month: "short" },
                         )}
                       </span>
@@ -2682,23 +2681,20 @@ function App() {
             >
               {theme === "dark" ? <SunIcon /> : <MoonIcon />}
             </button>
-            <div className="flex overflow-hidden rounded-md border border-zinc-700 text-xs light:border-zinc-300">
-              {(["en", "fr", "es"] as const).map((l) => (
-                <button
-                  key={l}
-                  type="button"
-                  onClick={() => switchLang(l)}
-                  aria-pressed={lang === l}
-                  className={`px-2.5 py-1.5 font-medium uppercase transition-colors ${
-                    lang === l
-                      ? "bg-zinc-700 text-white light:bg-zinc-800"
-                      : "bg-zinc-900 text-zinc-500 hover:text-zinc-200 light:bg-white light:hover:text-zinc-800"
-                  }`}
-                >
-                  {l}
-                </button>
+            {/* Five languages: a select stays compact where a button row
+                would sprawl. Uppercase codes read like the old toggle. */}
+            <select
+              value={lang}
+              onChange={(e) => switchLang(e.target.value as Lang)}
+              aria-label="Language"
+              className={`cursor-pointer rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs font-medium uppercase text-zinc-300 transition-colors hover:text-zinc-100 light:border-zinc-300 light:bg-white light:text-zinc-600 light:hover:text-zinc-900 ${focusRing}`}
+            >
+              {(["en", "fr", "es", "de", "it"] as const).map((l) => (
+                <option key={l} value={l}>
+                  {l.toUpperCase()}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
         </div>
         <p className="mt-2 text-zinc-300 light:text-zinc-700">{t.tagline}</p>
