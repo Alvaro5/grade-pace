@@ -61,6 +61,32 @@ const en = {
   terrainLabel: "Terrain slowdown",
   terrainHint:
     "extra time for technical or rough ground (default ×1.04, measured on real trail runs). Best measured yourself: see “Calibrate from a real run”.",
+  climbsTitle: "Key climbs",
+  climbsSubtitle: "· where the race is decided",
+  climbsMore: (n: number) => `+ ${n} smaller climbs not listed`,
+  colLength: "length",
+  colVam: "VAM",
+  compareTitle: "Post-race check",
+  compareSubtitle: "· predicted vs what you ran",
+  compareIntro:
+    "After the race, upload the activity you recorded. You'll see where the plan held and where reality drifted, split by split.",
+  compareAdd: "Upload the recorded race",
+  compareUploadAria: "Upload the recorded race GPX for comparison",
+  compareSummary: (pred: string, act: string, delta: string) =>
+    `Predicted ${pred} · you ran ${act} · ${delta}`,
+  compareStops: (t: string) => `time not moving ${t}`,
+  compareWorst: (lost: string, span: string) =>
+    `Biggest gap: ${lost} lost between ${span}.`,
+  compareBest: (gain: string, span: string) =>
+    `Strongest stretch: ${gain} gained between ${span}.`,
+  comparePartial:
+    "The recording is shorter than the course. The comparison covers the recorded part only.",
+  compareMismatch:
+    "The recording is much longer than the course, so distances are compared as absolute.",
+  compareClear: "Clear comparison",
+  thActual: "actual",
+  naiveLine: (naive: string, real: string) =>
+    `A flat-pace calculator would promise ${naive}. This course makes it ${real}.`,
   fadeLabel: "Late-race fade",
   fadeHint:
     "extra slowdown per hour after hour 4, for tiredness (default 2%/h from ultra pacing studies). 0 = constant effort",
@@ -270,6 +296,32 @@ const fr: Messages = {
   terrainLabel: "Ralentissement terrain",
   terrainHint:
     "temps en plus pour terrain technique (défaut ×1,04, mesuré sur de vraies sorties). L'idéal : mesurez le vôtre, voir « Calibrer avec une vraie sortie ».",
+  climbsTitle: "Montées clés",
+  climbsSubtitle: "· là où la course se joue",
+  climbsMore: (n: number) => `+ ${n} montées plus petites non listées`,
+  colLength: "longueur",
+  colVam: "VAM",
+  compareTitle: "Après la course",
+  compareSubtitle: "· prévu vs couru",
+  compareIntro:
+    "Après la course, importez l'activité enregistrée. Vous verrez où le plan a tenu et où la réalité a dérivé, tronçon par tronçon.",
+  compareAdd: "Importer la course enregistrée",
+  compareUploadAria: "Importer le GPX de la course enregistrée pour comparaison",
+  compareSummary: (pred: string, act: string, delta: string) =>
+    `Prévu ${pred} · couru ${act} · ${delta}`,
+  compareStops: (t: string) => `temps à l'arrêt ${t}`,
+  compareWorst: (lost: string, span: string) =>
+    `Plus gros écart : ${lost} perdues entre ${span}.`,
+  compareBest: (gain: string, span: string) =>
+    `Meilleure portion : ${gain} gagnées entre ${span}.`,
+  comparePartial:
+    "L'enregistrement est plus court que le parcours. La comparaison couvre la partie enregistrée seulement.",
+  compareMismatch:
+    "L'enregistrement est bien plus long que le parcours, les distances sont donc comparées en absolu.",
+  compareClear: "Retirer la comparaison",
+  thActual: "réel",
+  naiveLine: (naive: string, real: string) =>
+    `Un calculateur d'allure plate promettrait ${naive}. Ce parcours en fait ${real}.`,
   fadeLabel: "Fatigue de fin de course",
   fadeHint:
     "ralentissement supplémentaire par heure après la 4e heure (défaut 2 %/h, d'après les études d'allure en ultra). 0 = effort constant",
@@ -480,6 +532,32 @@ const es: Messages = {
   terrainLabel: "Penalización de terreno",
   terrainHint:
     "tiempo extra por terreno técnico (por defecto ×1,04, medido en salidas reales). Lo ideal: mídelo tú mismo, ver “Calibrar con una salida real”.",
+  climbsTitle: "Subidas clave",
+  climbsSubtitle: "· donde se decide la carrera",
+  climbsMore: (n: number) => `+ ${n} subidas menores no listadas`,
+  colLength: "longitud",
+  colVam: "VAM",
+  compareTitle: "Tras la carrera",
+  compareSubtitle: "· previsto vs corrido",
+  compareIntro:
+    "Después de la carrera, sube la actividad grabada. Verás dónde aguantó el plan y dónde la realidad se desvió, tramo a tramo.",
+  compareAdd: "Subir la carrera grabada",
+  compareUploadAria: "Subir el GPX de la carrera grabada para comparar",
+  compareSummary: (pred: string, act: string, delta: string) =>
+    `Previsto ${pred} · corriste ${act} · ${delta}`,
+  compareStops: (t: string) => `tiempo parado ${t}`,
+  compareWorst: (lost: string, span: string) =>
+    `Mayor desfase: ${lost} perdidos entre ${span}.`,
+  compareBest: (gain: string, span: string) =>
+    `Mejor tramo: ${gain} ganados entre ${span}.`,
+  comparePartial:
+    "La grabación es más corta que el recorrido. La comparación cubre solo la parte grabada.",
+  compareMismatch:
+    "La grabación es mucho más larga que el recorrido, así que las distancias se comparan en absoluto.",
+  compareClear: "Quitar la comparación",
+  thActual: "real",
+  naiveLine: (naive: string, real: string) =>
+    `Una calculadora de ritmo plano prometería ${naive}. Este recorrido lo convierte en ${real}.`,
   fadeLabel: "Fatiga de final de carrera",
   fadeHint:
     "ralentización extra por hora después de la hora 4 (por defecto 2%/h, según estudios de ritmo en ultras). 0 = esfuerzo constante",
@@ -690,6 +768,32 @@ const de: Messages = {
   terrainLabel: "Gelände-Faktor",
   terrainHint:
     "Zeitaufschlag für technisches Gelände (Standard ×1,04, auf echten Trailläufen gemessen). Am besten selbst messen: siehe „Mit einem echten Lauf kalibrieren“.",
+  climbsTitle: "Schlüsselanstiege",
+  climbsSubtitle: "· wo das Rennen entschieden wird",
+  climbsMore: (n: number) => `+ ${n} kleinere Anstiege nicht gelistet`,
+  colLength: "Länge",
+  colVam: "VAM",
+  compareTitle: "Nach dem Rennen",
+  compareSubtitle: "· Prognose vs gelaufen",
+  compareIntro:
+    "Lade nach dem Rennen die aufgezeichnete Aktivität hoch. Du siehst Abschnitt für Abschnitt, wo der Plan hielt und wo die Realität abwich.",
+  compareAdd: "Aufgezeichnetes Rennen hochladen",
+  compareUploadAria: "GPX des aufgezeichneten Rennens zum Vergleich hochladen",
+  compareSummary: (pred: string, act: string, delta: string) =>
+    `Prognose ${pred} · gelaufen ${act} · ${delta}`,
+  compareStops: (t: string) => `Standzeit ${t}`,
+  compareWorst: (lost: string, span: string) =>
+    `Größte Lücke: ${lost} verloren zwischen ${span}.`,
+  compareBest: (gain: string, span: string) =>
+    `Stärkster Abschnitt: ${gain} gewonnen zwischen ${span}.`,
+  comparePartial:
+    "Die Aufzeichnung ist kürzer als die Strecke. Der Vergleich deckt nur den aufgezeichneten Teil ab.",
+  compareMismatch:
+    "Die Aufzeichnung ist deutlich länger als die Strecke, Distanzen werden daher absolut verglichen.",
+  compareClear: "Vergleich entfernen",
+  thActual: "Ist",
+  naiveLine: (naive: string, real: string) =>
+    `Ein Flachtempo-Rechner würde ${naive} versprechen. Diese Strecke macht daraus ${real}.`,
   fadeLabel: "Ermüdung im Rennverlauf",
   fadeHint:
     "zusätzliche Verlangsamung pro Stunde nach Stunde 4 (Standard 2 %/h, aus Ultra-Pacing-Studien). 0 = konstante Leistung",
@@ -901,6 +1005,32 @@ const it: Messages = {
   terrainLabel: "Fattore terreno",
   terrainHint:
     "tempo extra per terreno tecnico (predefinito ×1,04, misurato su uscite reali). L'ideale: misuralo tu stesso, vedi “Calibra con un'uscita reale”.",
+  climbsTitle: "Salite chiave",
+  climbsSubtitle: "· dove si decide la gara",
+  climbsMore: (n: number) => `+ ${n} salite minori non elencate`,
+  colLength: "lunghezza",
+  colVam: "VAM",
+  compareTitle: "Dopo la gara",
+  compareSubtitle: "· previsto vs corso",
+  compareIntro:
+    "Dopo la gara, carica l'attività registrata. Vedrai dove il piano ha tenuto e dove la realtà è andata altrove, tratto per tratto.",
+  compareAdd: "Carica la gara registrata",
+  compareUploadAria: "Carica il GPX della gara registrata per il confronto",
+  compareSummary: (pred: string, act: string, delta: string) =>
+    `Previsto ${pred} · corso ${act} · ${delta}`,
+  compareStops: (t: string) => `tempo fermo ${t}`,
+  compareWorst: (lost: string, span: string) =>
+    `Distacco maggiore: ${lost} persi tra ${span}.`,
+  compareBest: (gain: string, span: string) =>
+    `Tratto migliore: ${gain} guadagnati tra ${span}.`,
+  comparePartial:
+    "La registrazione è più corta del percorso. Il confronto copre solo la parte registrata.",
+  compareMismatch:
+    "La registrazione è molto più lunga del percorso, quindi le distanze sono confrontate in assoluto.",
+  compareClear: "Rimuovi il confronto",
+  thActual: "reale",
+  naiveLine: (naive: string, real: string) =>
+    `Una calcolatrice a ritmo piatto prometterebbe ${naive}. Questo percorso lo trasforma in ${real}.`,
   fadeLabel: "Calo di fine gara",
   fadeHint:
     "rallentamento extra all'ora dopo la 4a ora (predefinito 2%/h, dagli studi sul ritmo negli ultra). 0 = sforzo costante",

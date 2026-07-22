@@ -483,6 +483,7 @@ export default function CourseMap({
     cancelAnimationFrame(replayRaf.current);
     replayMarkerRef.current?.remove();
     replayMarkerRef.current = null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot reset on course change, cannot cascade
     setReplaying(false);
   }, [coords]);
 

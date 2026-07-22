@@ -746,6 +746,37 @@
   was a stale service worker on the phone (pre-auto-update deploy), which
   one manual close/reopen resolves permanently.
 
+- **Credibility round (owner-approved triage of an external review's list).**
+  - *Post-race accuracy check* (`src/lib/raceCompare.ts`, +6 tests): upload
+    the recorded race; wall-elapsed vs the dwell-adjusted plan, aligned by
+    NORMALIZED distance inside a 0.92-1.08 GPS-overage band (absolute
+    outside it: partial = DNF-safe trailing nulls, mismatch flagged).
+    Paused-watch gaps stay in as drift steps (signal, not noise); moving
+    time reported separately; O(n) worst-stretch locator. UI: collapsed
+    card with summary line, stop overhead, worst/best stretch phrase, an
+    amber drift sparkline, and actual/Δ columns joining the splits table
+    while loaded. The comparison re-derives against the CURRENT plan, so
+    changing pace or dwell after upload keeps the deltas honest. Verified
+    with a synthetic 2%-slower Imperial recording → measured +1.9%.
+  - *Key climbs* (`src/lib/climbs.ts`, +7 tests): hysteresis detection with
+    a RELATIVE dip tolerance clamp(10% of banked gain, 10 m, 50 m), net-
+    gain semantics, first-max plateau tie-break; thresholds validated on
+    the real course BEFORE building (Imperial → 7 climbs). Card lists top
+    10 by gain in course order (C1..: km, length, D+, avg%, plan time,
+    target VAM, dwell-adjusted ETA + clock); amber C# ticks on the chart
+    baseline; climbs table added to the PDF sheet.
+  - *Naive-planner contrast*: one always-visible line under the stats,
+    live-verified copy: "A flat-pace calculator would promise 6:53. This
+    course makes it 7:44." The pinned-post thesis as a number. (Planned
+    duplicate inside the How-it-works card was dropped: that card lives
+    outside the dashboard component and the always-visible spot is
+    strictly better.)
+  - Skipped by triage: standalone methodology page (README + How-it-works
+    cover it; the deep-dive is better as the owner's own thread) and
+    weather-aware ranges (forecasts exist ~14 days out, race planning
+    happens months out; revisit as a race-week feature, Open-Meteo is
+    keyless). 145 unit + 5 e2e.
+
 ## Next
 - **Owner-gated** (explicitly deferred, do not start without a decision):
   fatigue-fade model (needs a second calibration point; never fit terrain +
@@ -755,8 +786,8 @@
 - Optional elevation polish (only if it earns its keep): expose
   `D_PLUS_THRESHOLD_M` / `SMOOTH_WINDOW_M` as UI controls; or a Savitzky-Golay
   smoother (preserves climb peaks better than a box MA, harder to explain).
-- e2e in CI: once PR #2 (CI workflow) merges, add `npm run e2e` as a job
-  (needs `npx playwright install chromium` in the workflow).
+- Race-week feature parked by triage: weather-aware range + fluid bump
+  (Open-Meteo, keyless + CORS; only meaningful within ~14 days of the race).
 - Ideas parked: per-station dwell overrides; caffeine back-half weighting;
   fullscreen-map hover sync.
 

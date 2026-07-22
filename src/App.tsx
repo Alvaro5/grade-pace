@@ -31,6 +31,7 @@ import {
   GpxError,
   type GpxErrorCode,
   type Split,
+  type TrackPoint,
 } from "./lib/pacing";
 import { fmtClock, fmtClockShort, fmtPace } from "./lib/format";
 import { GRADE_LEGEND } from "./lib/gradeColor";
@@ -63,6 +64,8 @@ import {
 } from "./lib/logistics";
 import { clearPlan, loadPlan, savePlan } from "./lib/persistence";
 import { buildPlanGpx } from "./lib/planGpx";
+import { detectClimbs } from "./lib/climbs";
+import { compareRace, type RaceComparison } from "./lib/raceCompare";
 import { MESSAGES, initialLang, type Lang, type Messages } from "./lib/i18n";
 // Aliased: `track` is taken by the parsed-GPX state variable in GpxUpload.
 import { track as trackEvent } from "./lib/analytics";
@@ -555,6 +558,13 @@ function GpxUpload({
   const [chartZoom, setChartZoom] = useState(false);
   const [mapZoom, setMapZoom] = useState(false);
   const [threeD, setThreeD] = useState(false);
+  // Post-race check: the recorded race's raw timed points. The comparison
+  // itself is re-derived per render so it always tracks the CURRENT plan
+  // (changing dwell or pace after upload updates the deltas honestly).
+  const [comparePoints, setComparePoints] = useState<TrackPoint[] | null>(
+    null,
+  );
+  const [compareError, setCompareError] = useState<string | null>(null);
   // Basemap preference is lifted here (not in CourseMap) because two map
   // instances can be live at once — inline + fullscreen must stay in sync.
   const [basemap, setBasemap] = useState<BasemapId>(initialBasemap);
@@ -944,6 +954,8 @@ function GpxUpload({
         setPoiOn(false);
         setPoiStatus("idle");
         setPoiItems([]);
+        setComparePoints(null);
+        setCompareError(null);
         // Aid stations are course data: a new course either brings its own
         // (file waypoints → auto-fill) or invalidates the previous entries.
         // The first-visit auto-load is exempt so a shared link's stations
@@ -1260,6 +1272,33 @@ function GpxUpload({
   const rowAdjElapsed = splits.map((s, i) =>
     rowElapsed(s.elapsedSec, rowEndKms[i]),
   );
+  // Named climbs (pure detection on the smoothed profile); display caps at
+  // the top 10 by gain, kept in course order.
+  const climbs = useMemo(
+    () => (track ? detectClimbs(track.profile) : []),
+    [track],
+  );
+  const shownClimbs = useMemo(() => {
+    const top = new Set(
+      [...climbs].sort((a, b) => b.gainM - a.gainM).slice(0, 10),
+    );
+    return climbs.filter((c) => top.has(c));
+  }, [climbs]);
+
+  // Post-race comparison, re-derived so it always matches the current plan.
+  const comparison: RaceComparison | null = useMemo(() => {
+    if (!comparePoints || !track || !splits.length) return null;
+    return compareRace(comparePoints, {
+      bucketEndKm: rowEndKms,
+      predictedAdjSec: rowAdjElapsed,
+      totalKm: track.distanceKm,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rowEndKms/rowAdjElapsed derive from exactly these deps
+  }, [comparePoints, track, splits, aidKms, dwellSec]);
+
+  // What a naive flat-pace calculator would promise on this course.
+  const naiveSec = track ? enginePaceSecPerKm * track.distanceKm : 0;
+
   const startSec = parseStartTime(startText);
   const startValid = startText.trim() === "" || startSec !== null;
   const clockAt = (elapsed: number) =>
@@ -1404,6 +1443,32 @@ function GpxUpload({
     }
   }
 
+  // Post-race check upload: parse, keep the raw timed points, let the memo
+  // derive the comparison against whatever the plan currently says.
+  function handleCompareFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setCompareError(null);
+    file
+      .text()
+      .then((text) => {
+        const points = parseGpx(text);
+        if (points.some((pt) => typeof pt.time !== "number")) {
+          setCompareError(t.calibNoTime(file.name));
+          return;
+        }
+        setComparePoints(points);
+        trackEvent("race-compare");
+      })
+      .catch((err) => {
+        console.error(err);
+        setCompareError(
+          err instanceof GpxError ? gpxErrorMsg(t, err.code) : t.errGeneric,
+        );
+      });
+  }
+
   // Render the whole plan (stats, settings, profile, aid ETAs, nutrition,
   // every split) as a printable sheet in a new tab; the browser's print
   // dialog turns it into a PDF or paper for race day.
@@ -1504,6 +1569,41 @@ function GpxUpload({
         `${fmtClock(rowAdjElapsed[i])}${withClock(rowAdjElapsed[i])}`,
       ]),
     };
+    const climbsTable: SheetTable | null = shownClimbs.length
+      ? {
+          title: t.climbsTitle,
+          cols: [
+            unitShort,
+            t.colLength,
+            t.thDplus,
+            t.thGrade,
+            t.colDuration,
+            t.colVam,
+            t.sheetEta,
+          ],
+          rows: shownClimbs.map((c, i) => {
+            const startMoving = elapsedAtKm(c.fromKm) ?? 0;
+            const climbSec =
+              (elapsedAtKm(c.toKm) ?? startMoving) - startMoving;
+            const etaSec =
+              startMoving + dwellBefore(aidKms, c.fromKm + 1e-6, dwellSec);
+            const vam = climbSec > 0 ? (c.gainM * 3600) / climbSec : 0;
+            return [
+              `C${i + 1}  ·  ${(units === "imperial" ? c.fromKm / KM_PER_MI : c.fromKm).toFixed(1)}`,
+              units === "imperial"
+                ? `${Math.round(c.lengthM * FT_PER_M)} ft`
+                : `${Math.round(c.lengthM)} m`,
+              gainStr(c.gainM),
+              `+${(c.avgGrade * 100).toFixed(0)}%`,
+              fmtPace(climbSec),
+              units === "imperial"
+                ? `${Math.round(vam * FT_PER_M)} ft/h`
+                : `${Math.round(vam)} m/h`,
+              `≈ ${fmtClockShort(etaSec)}${withClock(etaSec)}`,
+            ];
+          }),
+        }
+      : null;
     const html = buildPlanSheetHtml({
       lang,
       title: title.trim() || t.racePlan,
@@ -1552,6 +1652,7 @@ function GpxUpload({
       })),
       legend: legendRow,
       aidTable,
+      climbsTable,
       nutritionTable,
       splitsTable,
       footer: t.sheetFooter(window.location.host),
@@ -2154,6 +2255,10 @@ function GpxUpload({
                 theme={theme}
                 paceLabelAt={paceLabelAt}
                 aidKms={aidKms}
+                climbMarks={shownClimbs.map((c, i) => ({
+                  km: c.fromKm,
+                  label: `C${i + 1}`,
+                }))}
                 onHoverKm={onHoverKm}
               />
             </Suspense>
@@ -2352,6 +2457,10 @@ function GpxUpload({
                   theme={theme}
                   paceLabelAt={paceLabelAt}
                   aidKms={aidKms}
+                  climbMarks={shownClimbs.map((c, i) => ({
+                    km: c.fromKm,
+                    label: `C${i + 1}`,
+                  }))}
                 />
               </div>
               <div onClick={(e) => e.stopPropagation()}>{chartLegend}</div>
@@ -2418,6 +2527,13 @@ function GpxUpload({
               ))}
             </p>
           )}
+          {/* The pinned-post thesis as one number: what a flat calculator
+              would promise vs what the hills actually cost. */}
+          {track && (
+            <p className="text-xs text-zinc-500">
+              {t.naiveLine(fmtClockShort(naiveSec), fmtClockShort(adjFinishSec))}
+            </p>
+          )}
 
           {/* Compact one-row share bar — the button label says what it does,
               so no explainer paragraph. siteUrl is taken at runtime so the
@@ -2475,6 +2591,231 @@ function GpxUpload({
               </div>
             )}
           </div>
+
+          {/* Key climbs: the race in the units runners think in. */}
+          {shownClimbs.length > 0 && (
+            <details className={cardClass}>
+              <summary className="flex cursor-pointer flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-500 light:hover:text-zinc-800">
+                <ChevronIcon className="chev h-3.5 w-3.5" />
+                {t.climbsTitle}
+                <span className="ml-1 font-normal normal-case tracking-normal text-zinc-500">
+                  {t.climbsSubtitle}
+                </span>
+              </summary>
+              <div className="-mx-4 mt-3 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+                <table className="w-full min-w-[34rem] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-700 text-xs uppercase tracking-wider text-zinc-400 light:border-zinc-300 light:text-zinc-500">
+                      <th className="py-2 pr-4 text-left font-medium">
+                        {units === "imperial" ? "mi" : "km"}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.colLength}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.thDplus}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.thGrade}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.colDuration}
+                      </th>
+                      <th className="py-2 pr-4 text-right font-medium">
+                        {t.colVam}
+                      </th>
+                      <th className="py-2 text-right font-medium">
+                        {t.sheetEta}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shownClimbs.map((c, i) => {
+                      const startMoving = elapsedAtKm(c.fromKm) ?? 0;
+                      const climbSec =
+                        (elapsedAtKm(c.toKm) ?? startMoving) - startMoving;
+                      const etaSec =
+                        startMoving +
+                        dwellBefore(aidKms, c.fromKm + 1e-6, dwellSec);
+                      const vam =
+                        climbSec > 0 ? (c.gainM * 3600) / climbSec : 0;
+                      return (
+                        <tr
+                          key={c.fromKm}
+                          className="border-b border-zinc-800/70 tabular-nums text-zinc-200 transition-colors hover:bg-zinc-900/40 light:border-zinc-200 light:text-zinc-800 light:hover:bg-zinc-100"
+                        >
+                          <td className="py-1.5 pr-4">
+                            <span className="mr-1.5 font-semibold text-amber-400 light:text-amber-600">
+                              C{i + 1}
+                            </span>
+                            {(units === "imperial"
+                              ? c.fromKm / KM_PER_MI
+                              : c.fromKm
+                            ).toFixed(1)}
+                          </td>
+                          <td className="py-1.5 pr-4 text-right">
+                            {units === "imperial"
+                              ? `${Math.round(c.lengthM * FT_PER_M)} ft`
+                              : `${Math.round(c.lengthM)} m`}
+                          </td>
+                          <td className="py-1.5 pr-4 text-right">
+                            {gainStr(c.gainM)}
+                          </td>
+                          <td className="py-1.5 pr-4 text-right text-rose-400 light:text-rose-600">
+                            +{(c.avgGrade * 100).toFixed(0)}%
+                          </td>
+                          <td className="py-1.5 pr-4 text-right">
+                            {fmtPace(climbSec)}
+                          </td>
+                          <td className="py-1.5 pr-4 text-right">
+                            {units === "imperial"
+                              ? `${Math.round(vam * FT_PER_M)} ft/h`
+                              : `${Math.round(vam)} m/h`}
+                          </td>
+                          <td className="py-1.5 text-right">
+                            ≈ {fmtClockShort(etaSec)}
+                            {clockAt(etaSec) && (
+                              <span className="text-zinc-500">
+                                {" "}
+                                · {clockAt(etaSec)}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {climbs.length > shownClimbs.length && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  {t.climbsMore(climbs.length - shownClimbs.length)}
+                </p>
+              )}
+            </details>
+          )}
+
+          {/* Post-race check: the only honest answer to "does this work". */}
+          <details className={cardClass}>
+            <summary className="flex cursor-pointer flex-wrap items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-400 transition-colors hover:text-zinc-200 light:text-zinc-500 light:hover:text-zinc-800">
+              <ChevronIcon className="chev h-3.5 w-3.5" />
+              {t.compareTitle}
+              <span className="ml-1 font-normal normal-case tracking-normal text-zinc-500">
+                {t.compareSubtitle}
+              </span>
+            </summary>
+            <p className="mt-3 text-sm text-zinc-400 light:text-zinc-600">
+              {t.compareIntro}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <label
+                className={`${btnSecondaryClass} cursor-pointer focus-within:ring-2 focus-within:ring-emerald-500/60`}
+              >
+                <UploadIcon />
+                {t.compareAdd}
+                <input
+                  type="file"
+                  accept=".gpx"
+                  onChange={handleCompareFile}
+                  aria-label={t.compareUploadAria}
+                  className="sr-only"
+                />
+              </label>
+              {comparison && (
+                <button
+                  type="button"
+                  onClick={() => setComparePoints(null)}
+                  className={`rounded text-sm text-zinc-500 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-zinc-200 light:hover:text-zinc-800 ${focusRing}`}
+                >
+                  {t.compareClear}
+                </button>
+              )}
+            </div>
+            {compareError && (
+              <div role="alert" className={`mt-3 ${alertClass}`}>
+                {compareError}
+              </div>
+            )}
+            {comparison && (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm font-medium tabular-nums text-zinc-100 light:text-zinc-900">
+                  {t.compareSummary(
+                    fmtClock(adjFinishSec),
+                    fmtClock(comparison.finishSec),
+                    `${comparison.finishSec >= adjFinishSec ? "+" : "−"}${fmtClockShort(Math.abs(comparison.finishSec - adjFinishSec))} (${((100 * (comparison.finishSec - adjFinishSec)) / adjFinishSec).toFixed(1)}%)`,
+                  )}
+                </p>
+                <p className="text-xs tabular-nums text-zinc-500">
+                  {t.compareStops(
+                    fmtClockShort(comparison.finishSec - comparison.movingSec),
+                  )}
+                </p>
+                {comparison.worstStretch && (
+                  <p
+                    className={`text-xs tabular-nums ${comparison.worstStretch.lostSec >= 0 ? "text-amber-300 light:text-amber-700" : "text-emerald-400 light:text-emerald-600"}`}
+                  >
+                    {comparison.worstStretch.lostSec >= 0
+                      ? t.compareWorst(
+                          fmtClockShort(comparison.worstStretch.lostSec),
+                          `${units === "imperial" ? "mi" : "km"} ${comparison.worstStretch.fromKm}–${comparison.worstStretch.toKm}`,
+                        )
+                      : t.compareBest(
+                          fmtClockShort(-comparison.worstStretch.lostSec),
+                          `${units === "imperial" ? "mi" : "km"} ${comparison.worstStretch.fromKm}–${comparison.worstStretch.toKm}`,
+                        )}
+                  </p>
+                )}
+                {comparison.coverage === "partial" && (
+                  <p className="text-xs text-amber-300 light:text-amber-700">
+                    {t.comparePartial}
+                  </p>
+                )}
+                {comparison.coverage === "mismatch" && (
+                  <p className="text-xs text-amber-300 light:text-amber-700">
+                    {t.compareMismatch}
+                  </p>
+                )}
+                {/* Drift sparkline: actual minus predicted over the course. */}
+                {(() => {
+                  const pts = comparison.rows.filter(
+                    (r) => r.deltaSec !== null,
+                  );
+                  if (pts.length < 2) return null;
+                  const W = 600;
+                  const H = 48;
+                  const maxAbs = Math.max(
+                    60,
+                    ...pts.map((r) => Math.abs(r.deltaSec!)),
+                  );
+                  const x = (i: number) => (i / (pts.length - 1)) * W;
+                  const y = (d: number) => H / 2 - (d / maxAbs) * (H / 2 - 4);
+                  const d = `M${pts.map((r, i) => `${x(i).toFixed(1)},${y(r.deltaSec!).toFixed(1)}`).join("L")}`;
+                  return (
+                    <svg
+                      viewBox={`0 0 ${W} ${H}`}
+                      className="block h-12 w-full"
+                      aria-hidden
+                    >
+                      <line
+                        x1={0}
+                        x2={W}
+                        y1={H / 2}
+                        y2={H / 2}
+                        stroke={theme === "dark" ? "#3f3f46" : "#d4d4d8"}
+                        strokeDasharray="3 3"
+                      />
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="#f59e0b"
+                        strokeWidth={1.8}
+                      />
+                    </svg>
+                  );
+                })()}
+              </div>
+            )}
+          </details>
 
           {/* Nutrition plan: collapsed by default (same pattern as the
               calibration card) — it's a planning tool, not landing-page
@@ -2687,6 +3028,14 @@ function GpxUpload({
                     {t.thPace}
                   </th>
                   <th className="py-2 text-right font-medium">{t.thElapsed}</th>
+                  {comparison && (
+                    <>
+                      <th className="py-2 pl-4 text-right font-medium">
+                        {t.thActual}
+                      </th>
+                      <th className="py-2 pl-4 text-right font-medium">Δ</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -2741,6 +3090,26 @@ function GpxUpload({
                         </span>
                       )}
                     </td>
+                    {comparison && (
+                      <>
+                        <td className="py-1.5 pl-4 text-right">
+                          {comparison.rows[i]?.actualSec != null
+                            ? fmtClock(comparison.rows[i].actualSec!)
+                            : "·"}
+                        </td>
+                        <td
+                          className={`py-1.5 pl-4 text-right ${
+                            (comparison.rows[i]?.deltaSec ?? 0) > 0
+                              ? "text-rose-400 light:text-rose-600"
+                              : "text-emerald-400 light:text-emerald-600"
+                          }`}
+                        >
+                          {comparison.rows[i]?.deltaSec != null
+                            ? `${comparison.rows[i].deltaSec! >= 0 ? "+" : "−"}${fmtPace(Math.abs(comparison.rows[i].deltaSec!))}`
+                            : "·"}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>

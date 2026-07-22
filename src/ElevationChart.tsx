@@ -34,6 +34,7 @@ export default function ElevationChart({
   theme = "dark",
   paceLabelAt,
   aidKms,
+  climbMarks,
   onHoverKm,
 }: {
   profile: { km: number; ele: number }[];
@@ -50,6 +51,8 @@ export default function ElevationChart({
   paceLabelAt?: (kmMetric: number) => string | null;
   // Aid-station positions in metric km — dashed markers labeled R1, R2, …
   aidKms?: number[];
+  // Climb starts (metric km): amber "C#" ticks anchored at the baseline.
+  climbMarks?: { km: number; label: string }[];
   // Reports the hovered course position (metric km, null on leave) so the
   // map can mirror it with a marker.
   onHoverKm?: (kmMetric: number | null) => void;
@@ -413,6 +416,30 @@ export default function ElevationChart({
                 fill={dark ? "#d4d4d8" : "#52525b"}
               >
                 {`R${i + 1}`}
+              </text>
+            </g>
+          ))}
+          {/* Climb starts: amber baseline ticks, visually distinct from the
+              full-height aid lines. */}
+          {climbMarks?.map((c) => (
+            <g key={c.km}>
+              <line
+                x1={geom.x(c.km)}
+                x2={geom.x(c.km)}
+                y1={PAD_TOP + plotH - 8}
+                y2={PAD_TOP + plotH}
+                stroke="#f59e0b"
+                strokeWidth={2}
+              />
+              <text
+                x={geom.x(c.km)}
+                y={PAD_TOP + plotH - 12}
+                textAnchor="middle"
+                fontSize={10}
+                fontWeight={600}
+                fill={dark ? "#fbbf24" : "#b45309"}
+              >
+                {c.label}
               </text>
             </g>
           ))}

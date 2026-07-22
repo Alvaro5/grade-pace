@@ -95,7 +95,7 @@ your actual *moving* time → a measured terrain factor, applied with one click.
 npm install
 npm run dev      # local dev server
 npm run build    # production build (also what CI runs)
-npm run test     # engine + app tests (Vitest, 119 tests)
+npm run test     # engine + app tests (Vitest, 145 tests)
 npm run lint
 ```
 
@@ -131,6 +131,10 @@ src/
                        nutrition, full pacing table) for the PDF export.
   lib/planGpx.ts       Watch-ready GPX export: course track + aid waypoints
                        named with projected ETAs.
+  lib/climbs.ts        Named-climb detection (hysteresis, relative dip
+                       tolerance) behind the Key climbs card.
+  lib/raceCompare.ts   Post-race check: recorded race vs the plan, drift
+                       series and worst-stretch locator.
   App.tsx              UI: upload, effort inputs, calibration, share, table.
   ElevationChart.tsx   Grade-colored profile, hand-rolled SVG (lazy chunk).
   CourseMap.tsx        Map with the grade-colored route, aid stations, basemap

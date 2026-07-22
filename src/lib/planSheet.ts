@@ -40,6 +40,7 @@ export type PlanSheetData = {
   aidMarks: { frac: number; label: string }[];
   legend: { color: string; label: string }[];
   aidTable: SheetTable | null;
+  climbsTable?: SheetTable | null;
   nutritionTable: SheetTable | null;
   splitsTable: SheetTable;
   footer: string;
@@ -280,6 +281,7 @@ ${profileSvg(d)}
 <div class="legendrow">${legend}</div>
 </figure>
 ${d.aidTable ? table(d.aidTable) : ""}
+${d.climbsTable ? table(d.climbsTable) : ""}
 ${d.nutritionTable ? table(d.nutritionTable) : ""}
 ${table(d.splitsTable)}
 <footer>${esc(d.footer)}</footer>
