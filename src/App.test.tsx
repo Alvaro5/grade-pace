@@ -3,7 +3,7 @@
 // guarded the WIRING — "engine fine, page broken" is exactly what a visitor
 // would see. This renders the real <App/> and asserts the auto-load → badge →
 // dashboard flow end to end.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
@@ -38,19 +38,48 @@ async function flush(times = 20) {
   }
 }
 
+// Roots are tracked and unmounted after every test: a mounted App keeps its
+// effects alive (including the debounced plan auto-save), and on CI that
+// leaked one test's saved plan into the next test's localStorage. Locally the
+// env's broken storage hid the leak; CI's working storage exposed it.
+const roots: ReturnType<typeof createRoot>[] = [];
+function renderApp(container: HTMLElement) {
+  const root = createRoot(container);
+  roots.push(root);
+  root.render(<App />);
+}
+
 describe("App smoke test", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: true, text: async () => EXAMPLE_GPX })),
     );
+    // Fresh in-memory storage per test: hermetic regardless of whether the
+    // host environment's localStorage works (it differs between local node
+    // and CI happy-dom versions).
+    const m = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => void m.set(k, String(v)),
+      removeItem: (k: string) => void m.delete(k),
+      clear: () => m.clear(),
+    } as unknown as Storage);
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      roots.forEach((r) => r.unmount());
+    });
+    roots.length = 0;
+    vi.unstubAllGlobals();
   });
 
   it("auto-loads the example course and renders the full dashboard", async () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     await act(async () => {
-      createRoot(container).render(<App />);
+      renderApp(container);
     });
     await flush();
 
@@ -80,7 +109,7 @@ describe("App smoke test", () => {
       const container = document.createElement("div");
       document.body.appendChild(container);
       await act(async () => {
-        createRoot(container).render(<App />);
+        renderApp(container);
       });
       await flush();
 
@@ -124,15 +153,6 @@ describe("App smoke test", () => {
   });
 
   it("restores a saved plan instead of the example, hash still winning", async () => {
-    // The env's localStorage global is non-functional; give the app a real
-    // in-memory one for this test.
-    const m = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-      getItem: (k: string) => m.get(k) ?? null,
-      setItem: (k: string, v: string) => void m.set(k, String(v)),
-      removeItem: (k: string) => void m.delete(k),
-      clear: () => m.clear(),
-    } as unknown as Storage);
     const saved = {
       v: 1,
       savedAt: 1,
@@ -157,7 +177,7 @@ describe("App smoke test", () => {
       const container = document.createElement("div");
       document.body.appendChild(container);
       await act(async () => {
-        createRoot(container).render(<App />);
+        renderApp(container);
       });
       await flush();
 
@@ -183,7 +203,7 @@ describe("App smoke test", () => {
       const c2 = document.createElement("div");
       document.body.appendChild(c2);
       await act(async () => {
-        createRoot(c2).render(<App />);
+        renderApp(c2);
       });
       await flush();
       window.location.hash = "";
@@ -194,7 +214,6 @@ describe("App smoke test", () => {
       // A hash terrain factor is a guess, not the saved measurement.
       expect(c2.textContent).not.toContain("calibrated");
     } finally {
-      vi.unstubAllGlobals();
       window.location.hash = "";
     }
   });
@@ -207,7 +226,7 @@ describe("App smoke test", () => {
       const container = document.createElement("div");
       document.body.appendChild(container);
       await act(async () => {
-        createRoot(container).render(<App />);
+        renderApp(container);
       });
       await flush();
       window.location.hash = "";
@@ -231,7 +250,7 @@ describe("App smoke test", () => {
     const container = document.createElement("div");
     document.body.appendChild(container);
     await act(async () => {
-      createRoot(container).render(<App />);
+      renderApp(container);
     });
     await flush();
 
@@ -256,7 +275,7 @@ describe("App smoke test", () => {
       const container = document.createElement("div");
       document.body.appendChild(container);
       await act(async () => {
-        createRoot(container).render(<App />);
+        renderApp(container);
       });
       await flush();
 

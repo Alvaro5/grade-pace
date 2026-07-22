@@ -777,6 +777,19 @@
     happens months out; revisit as a race-week feature, Open-Meteo is
     keyless). 145 unit + 5 e2e.
 
+- **CI failures fixed (owner screenshots: red X since CI 12).** The App
+  smoke tests leaked state: mounted <App/> instances were never unmounted,
+  so the saved-plan test's app kept auto-saving (debounced) into whatever
+  localStorage existed after its stub was removed; later tests then booted
+  with a contaminated saved plan (visible in the CI log: "Saved · ×1.12 ·
+  850 m/h" inside the dwell and nutrition tests). The leak was invisible
+  locally because the local test env's localStorage is non-functional, and
+  real on CI's fresh happy-dom, hence green-local/red-CI. Fix: every test
+  gets a fresh in-memory localStorage stub in beforeEach, and every
+  rendered root is tracked and unmounted in afterEach (killing lingering
+  effects and their timers). Proven order-independent with two shuffled
+  runs. Environment-dependent test bugs die at the root, not by re-running.
+
 ## Next
 - **Owner-gated** (explicitly deferred, do not start without a decision):
   fatigue-fade model (needs a second calibration point; never fit terrain +
